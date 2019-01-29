@@ -26,6 +26,14 @@ from tempest.lib import exceptions
 from tempest.lib.services import clients
 from tempest.test_discover import plugins
 
+import sys
+sys.path.append("/usr/lib/python2.7/site-packages/")
+sys.path.append("/usr/local/lib/python2.7/dist-packages")
+
+from workloadmgrclient import utils
+DEFAULT_OS_WORKLOAD_API_VERSION = "1"
+DEFAULT_WORKLOADMGR_ENDPOINT_TYPE = 'publicURL'
+DEFAULT_WORKLOADMGR_SERVICE_TYPE = 'workloads'
 
 # TODO(marun) Replace use of oslo_config's global ConfigOpts
 # (cfg.CONF) instance with a local instance (cfg.ConfigOpts()) once
@@ -337,6 +345,10 @@ ComputeGroup = [
                     "If both values are not specified, Tempest avoids tests "
                     "which require a microversion. Valid values are string "
                     "with format 'X.Y' or string 'latest'"),
+    cfg.StrOpt('vm_availability_zone',
+               default=None,
+               help="Availability zone for instance launch"),
+
 ]
 
 compute_features_group = cfg.OptGroup(name='compute-feature-enabled',
@@ -634,6 +646,10 @@ NetworkGroup = [
                 default=False,
                 help="The environment does not support network separation "
                      "between tenants."),
+    cfg.StrOpt('internal_network_id',
+               default="",
+               help="Id of the private network that provides internal "
+                    "connectivity"),
 ]
 
 network_feature_group = cfg.OptGroup(name='network-feature-enabled',
@@ -807,6 +823,10 @@ VolumeGroup = [
                     "If both values are not specified, Tempest avoids tests "
                     "which require a microversion. Valid values are string "
                     "with format 'X.Y' or string 'latest'",),
+    cfg.StrOpt('volume_availability_zone',
+               default=None,
+               help="Availability zone for volume creation"),
+
 ]
 
 volume_feature_group = cfg.OptGroup(name='volume-feature-enabled',
@@ -1046,6 +1066,71 @@ or
  $ python -m testtools.run TEST_ID"""),
 ]
 
+workloadmgr_group = cfg.OptGroup(name='wlm',
+                                 title="Workloadmgr client API")
+WorkloadmgrGroup = [
+    cfg.StrOpt('admin_username',
+               default=utils.env('OS_USERNAME', 'WORKLOADMGR_USERNAME'),
+               help=""),
+    cfg.StrOpt('admin_password',
+               default=utils.env('OS_PASSWORD', 'WORKLOADMGR_PASSWORD'),
+               help=""),
+    cfg.StrOpt('os_tenant_name',
+               default=utils.env('OS_TENANT_NAME', 'WORKLOADMGR_PROJECT_ID'),
+               help=""),
+    cfg.StrOpt('os_tenant_id',
+               default=utils.env('OS_TENANT_ID', 'WORKLOADMGR_TENANT_ID'),
+               help=""),
+    cfg.StrOpt('admin_domain_id',
+               default=utils.env('OS_DOMAIN_ID'),
+               help=""),
+    cfg.StrOpt('os_auth_url',
+               default=utils.env('OS_AUTH_URL', 'WORKLOADMGR_URL'),
+               help=""),
+    cfg.StrOpt('os_region_name',
+               default=utils.env('OS_REGION_NAME', 'WORKLOADMGR_REGION_NAME'),
+               help=""),
+    cfg.StrOpt('service_type',
+               default=DEFAULT_WORKLOADMGR_SERVICE_TYPE,
+               help=""),
+    cfg.StrOpt('service_name',
+               default=utils.env('WORKLOADMGR_SERVICE_NAME'),
+               help=""),
+    cfg.StrOpt('workload_service_name',
+               default=utils.env('WORKLOADMGR_VOLUME_SERVICE_NAME'),
+               help=""),
+    cfg.StrOpt('endpoint_type',
+               default=DEFAULT_WORKLOADMGR_ENDPOINT_TYPE,
+               help=""),
+    cfg.StrOpt('os_wlm_api_version',
+               default=DEFAULT_OS_WORKLOAD_API_VERSION,
+               help=""),
+    cfg.StrOpt('os_cacert',
+               default=None,
+               help=""),
+    cfg.BoolOpt('insecure',
+                default=False,
+                help=""),
+    cfg.IntOpt('retries',
+               default=0,
+               help=""),
+    cfg.StrOpt('op_user',
+               default=None,
+               help="openstack's ssh username used to create a ssh connection"),
+    cfg.StrOpt('op_passw',
+               default=None,
+               help="openstack's password used to create a ssh connection"),
+    cfg.StrOpt('op_db_password',
+               default=None,
+               help="openstack's Maria db password"),
+    cfg.StrOpt('config_user',
+               default=None,
+               help="config backup user"),
+    cfg.StrOpt('config_pass',
+               default=None,
+               help="config backup user's password"),
+]
+
 _opts = [
     (auth_group, AuthGroup),
     (compute_group, ComputeGroup),
@@ -1065,7 +1150,8 @@ _opts = [
     (scenario_group, ScenarioGroup),
     (service_available_group, ServiceAvailableGroup),
     (debug_group, DebugGroup),
-    (None, DefaultGroup)
+    (None, DefaultGroup),
+    (workloadmgr_group, WorkloadmgrGroup),
 ]
 
 
@@ -1131,6 +1217,7 @@ class TempestConfigPrivate(object):
         self.scenario = _CONF.scenario
         self.service_available = _CONF.service_available
         self.debug = _CONF.debug
+        self.wlm = _CONF.wlm
         logging.tempest_set_log_file('tempest.log')
         # Setting attributes for plugins
         # NOTE(andreaf) Plugins have no access to the TempestConfigPrivate

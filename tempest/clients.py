@@ -18,6 +18,10 @@ from tempest.lib import auth
 from tempest.lib import exceptions as lib_exc
 from tempest.lib.services import clients
 
+import sys
+sys.path.append("/usr/lib/python2.7/site-packages/python_workloadmgrclient-1.0.160-py2.7.egg/workloadmgrclient/")
+from workloadmgrclient import client
+
 CONF = config.CONF
 
 
@@ -44,6 +48,7 @@ class Manager(clients.ServiceClients):
         self._set_object_storage_clients()
         self._set_image_clients()
         self._set_network_clients()
+        self._set_workloadmgr_clients()
         # TODO(andreaf) This is maintained for backward compatibility
         # with plugins, but it should removed eventually, since it was
         # never a stable interface and it's not useful anyways
@@ -327,6 +332,34 @@ class Manager(clients.ServiceClients):
         self.capabilities_client = self.object_storage.CapabilitiesClient()
         self.container_client = self.object_storage.ContainerClient()
         self.object_client = self.object_storage.ObjectClient()
+
+    def _set_workloadmgr_clients(self):
+        if CONF.identity.auth_version == 'v2':
+            authurl = CONF.identity.uri
+            endpoint = CONF.identity.v2_public_endpoint_type
+        elif CONF.identity.auth_version == 'v3':
+            authurl = CONF.identity.uri_v3
+            endpoint = CONF.identity.v3_endpoint_type
+        self.wlm_client = client.Client(1,
+                                        CONF.auth.admin_username,
+                                        CONF.auth.admin_password,
+                                        CONF.auth.admin_project_name,
+                                        authurl,
+                                        CONF.auth.admin_domain_name,
+                                        insecure=CONF.wlm.insecure,
+                                        region_name=CONF.identity.region,
+                                        tenant_id=CONF.wlm.os_tenant_id,
+                                        endpoint_type=endpoint,
+                                        service_type=CONF.wlm.service_type,
+                                        service_name=CONF.wlm.service_name,
+                                        retries=CONF.wlm.retries,
+                                        http_log_debug=False,
+                                        cacert=CONF.wlm.os_cacert)
+        try:
+            self.wlm_client.authenticate()
+        except Exception:
+            pass
+
 
 
 def get_auth_provider_class(credentials):
