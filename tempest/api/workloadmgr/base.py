@@ -137,8 +137,8 @@ class BaseWorkloadmgrTest(tempest.test.BaseTestCase):
     Method creates a workload and returns Workload id
     '''
     def workload_create(self, instances, workload_type ,jobschedule={}, workload_name="", workload_cleanup=True, description='test'):
-        if True:
-	    print "True"
+        if (1 == 0):
+	    LOG.debug("True")
         else:
             in_list = []
             if(workload_name == ""):
@@ -153,6 +153,7 @@ class BaseWorkloadmgrTest(tempest.test.BaseTestCase):
                               'jobschedule': jobschedule,
                               'metadata': {},
                               'description': description}}
+            LOG.debug("Workload-create payload:: %s " % payload)
             resp, body = self.wlm_client.client.post("/workloads", json=payload)
             workload_id = body['workload']['id']
             LOG.debug("#### workloadid: %s , operation:workload_create" % workload_id)
@@ -165,8 +166,6 @@ class BaseWorkloadmgrTest(tempest.test.BaseTestCase):
             if(resp.status_code != 202):
                 resp.raise_for_status()
         LOG.debug('WorkloadCreated: %s' % workload_id)
-        if(tvaultconf.cleanup == True and workload_cleanup == True):
-            self.addCleanup(self.workload_delete, workload_id)
         return workload_id
 
     '''
