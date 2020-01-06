@@ -38,12 +38,19 @@ class ImagesTestJSON(base.BaseV2ComputeTest):
     @classmethod
     def setup_clients(cls):
         super(ImagesTestJSON, cls).setup_clients()
-        cls.client = cls.compute_images_client
+        if cls.is_requested_microversion_compatible('2.35'):
+            cls.client = cls.compute_images_client
+        else:
+            cls.client = cls.images_client
 
     @decorators.idempotent_id('aa06b52b-2db5-4807-b218-9441f75d74e3')
     def test_delete_saving_image(self):
         server = self.create_test_server(wait_until='ACTIVE')
         self.addCleanup(self.servers_client.delete_server, server['id'])
+        # wait for server active to avoid conflict when deleting server
+        # in task_state image_snapshot
+        self.addCleanup(waiters.wait_for_server_status, self.servers_client,
+                        server['id'], 'ACTIVE')
         image = self.create_image_from_server(server['id'],
                                               wait_until='SAVING')
         self.client.delete_image(image['id'])

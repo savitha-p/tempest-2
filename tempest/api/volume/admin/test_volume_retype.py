@@ -36,7 +36,7 @@ class VolumeRetypeTest(base.BaseVolumeAdminTest):
         # process is finished.
         fetched_list = self.admin_volume_client.list_volumes(
             params={'all_tenants': True,
-                    'display_name': vol['name']})['volumes']
+                    'name': vol['name']})['volumes']
 
         for fetched_vol in fetched_list:
             if fetched_vol['id'] != vol['id']:
@@ -94,7 +94,7 @@ class VolumeRetypeWithMigrationTest(VolumeRetypeTest):
         super(VolumeRetypeTest, cls).skip_checks()
 
         if not CONF.volume_feature_enabled.multi_backend:
-            raise cls.skipException("Cinder multi-backend feature disabled.")
+            raise cls.skipException("Cinder multi-backend feature disabled")
 
         if len(set(CONF.volume.backend_names)) < 2:
             raise cls.skipException("Requires at least two different "

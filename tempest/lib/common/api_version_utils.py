@@ -12,6 +12,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import six
 import testtools
 
 from tempest.lib.common import api_version_request
@@ -54,7 +55,7 @@ def check_skip_with_microversion(test_min_version, test_max_version,
     config_min_version = api_version_request.APIVersionRequest(cfg_min_version)
     config_max_version = api_version_request.APIVersionRequest(cfg_max_version)
     if ((min_version > max_version) or
-       (config_min_version > config_max_version)):
+        (config_min_version > config_max_version)):
         msg = ("Test Class versions [%s - %s]. "
                "Configuration versions [%s - %s]."
                % (min_version.get_string(),
@@ -108,10 +109,12 @@ def assert_version_header_matches_request(api_microversion_header_name,
 
     :param api_microversion_header_name: Microversion header name
             Example- "X-OpenStack-Nova-API-Version"
-    :param api_microversion: Microversion number like "2.10"
+    :param api_microversion: Microversion number like "2.10", type str.
     :param response_header: Response header where microversion is
             expected to be present.
     """
+    if not isinstance(api_microversion, six.string_types):
+        raise TypeError('api_microversion must be a string')
     api_microversion_header_name = api_microversion_header_name.lower()
     if (api_microversion_header_name not in response_header or
         api_microversion != response_header[api_microversion_header_name]):

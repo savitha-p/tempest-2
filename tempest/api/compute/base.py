@@ -17,11 +17,11 @@ import time
 
 from oslo_log import log as logging
 
-from tempest.api.compute import api_microversion_fixture
 from tempest.common import compute
 from tempest.common import waiters
 from tempest import config
 from tempest import exceptions
+from tempest.lib.common import api_microversion_fixture
 from tempest.lib.common import api_version_request
 from tempest.lib.common import api_version_utils
 from tempest.lib.common.utils import data_utils
@@ -208,19 +208,6 @@ class BaseV2ComputeTest(api_version_utils.BaseMicroversionTest,
                 raise
 
     @classmethod
-    def clear_resources(cls, resource_name, resources, resource_del_func):
-        LOG.debug('Clearing %s: %s', resource_name,
-                  ','.join(map(str, resources)))
-        for res_id in resources:
-            try:
-                test_utils.call_and_ignore_notfound_exc(
-                    resource_del_func, res_id)
-            except Exception as exc:
-                LOG.exception('Exception raised deleting %s: %s',
-                              resource_name, res_id)
-                LOG.exception(exc)
-
-    @classmethod
     def create_test_server(cls, validatable=False, volume_backed=False,
                            validation_resources=None, **kwargs):
         """Wrapper utility that returns a test server.
@@ -344,8 +331,7 @@ class BaseV2ComputeTest(api_version_utils.BaseMicroversionTest,
         # The compute image proxy APIs were deprecated in 2.35 so
         # use the images client directly if the API microversion being
         # used is >=2.36.
-        if api_version_utils.compare_version_header_to_response(
-                "OpenStack-API-Version", "compute 2.36", image.response, "lt"):
+        if not cls.is_requested_microversion_compatible('2.35'):
             client = cls.images_client
         else:
             client = cls.compute_images_client
@@ -354,6 +340,9 @@ class BaseV2ComputeTest(api_version_utils.BaseMicroversionTest,
 
         if wait_until is not None:
             try:
+                wait_until = wait_until.upper()
+                if not cls.is_requested_microversion_compatible('2.35'):
+                    wait_until = wait_until.lower()
                 waiters.wait_for_image_status(client, image_id, wait_until)
             except lib_exc.NotFound:
                 if wait_until.upper() == 'ACTIVE':
@@ -468,7 +457,7 @@ class BaseV2ComputeTest(api_version_utils.BaseMicroversionTest,
             else:
                 msg = ('When validation.connect_method equals floating, '
                        'validation_resources cannot be None')
-                raise exceptions.InvalidParam(invalid_param=msg)
+                raise lib_exc.InvalidParam(invalid_param=msg)
         elif CONF.validation.connect_method == 'fixed':
             addresses = server['addresses'][CONF.validation.network_for_ssh]
             for address in addresses:
@@ -481,14 +470,14 @@ class BaseV2ComputeTest(api_version_utils.BaseMicroversionTest,
     def setUp(self):
         super(BaseV2ComputeTest, self).setUp()
         self.useFixture(api_microversion_fixture.APIMicroversionFixture(
-            self.request_microversion))
+            compute_microversion=self.request_microversion))
 
     @classmethod
     def create_volume(cls, image_ref=None, **kwargs):
         """Create a volume and wait for it to become 'available'.
 
         :param image_ref: Specify an image id to create a bootable volume.
-        :**kwargs: other parameters to create volume.
+        :param kwargs: other parameters to create volume.
         :returns: The available volume.
         """
         if 'size' not in kwargs:
@@ -498,6 +487,9 @@ class BaseV2ComputeTest(api_version_utils.BaseMicroversionTest,
             kwargs['display_name'] = vol_name
         if image_ref is not None:
             kwargs['imageRef'] = image_ref
+        if CONF.compute.compute_volume_common_az:
+            kwargs.setdefault('availability_zone',
+                              CONF.compute.compute_volume_common_az)
         volume = cls.volumes_client.create_volume(**kwargs)['volume']
         cls.addClassResourceCleanup(
             cls.volumes_client.wait_for_resource_deletion, volume['id'])
@@ -604,8 +596,9 @@ class BaseV2ComputeAdminTest(BaseV2ComputeTest):
         self.addCleanup(client.delete_flavor, flavor['id'])
         return flavor
 
-    def get_host_for_server(self, server_id):
-        server_details = self.admin_servers_client.show_server(server_id)
+    @classmethod
+    def get_host_for_server(cls, server_id):
+        server_details = cls.admin_servers_client.show_server(server_id)
         return server_details['server']['OS-EXT-SRV-ATTR:host']
 
     def get_host_other_than(self, server_id):

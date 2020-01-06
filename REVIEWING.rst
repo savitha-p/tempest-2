@@ -36,8 +36,11 @@ Unit Tests
 For any change that adds new functionality to either common functionality or an
 out-of-band tool unit tests are required. This is to ensure we don't introduce
 future regressions and to test conditions which we may not hit in the gate runs.
-Tests, and service clients aren't required to have unit tests since they should
-be self verifying by running them in the gate.
+API and scenario tests aren't required to have unit tests since they should
+be self-verifying by running them in the gate. All service clients, on the
+other hand, `must have`_ unit tests, as they belong to ``tempest/lib``.
+
+.. _must have: https://docs.openstack.org/tempest/latest/library.html#testing
 
 
 API Stability
@@ -156,8 +159,35 @@ fix it. When it will happen, we will deal with it on a case-by-case basis.
 
 When to approve
 ---------------
-* Every patch needs two +2s before being approved.
-* It's ok to hold off on an approval until a subject matter expert reviews it
-* If a patch has already been approved but requires a trivial rebase to merge,
-  you do not have to wait for a second +2, since the patch has already had
-  two +2s.
+* It's OK to hold off on an approval until a subject matter expert reviews it.
+* Every patch needs two +2's before being approved.
+* However, a single Tempest core reviewer can approve patches without waiting
+  for another +2 in the following cases:
+
+  * If a patch has already been approved but requires a trivial rebase to
+    merge, then there is no need to wait for a second +2, since the patch has
+    already had two +2's.
+  * If any trivial patch set fixes one of the items below:
+
+    * Documentation or code comment typo
+    * Documentation ref link
+    * Example: `example`_
+
+    .. note::
+
+      Any other small documentation, CI job, or code change does not fall under
+      this category.
+
+  * If the patch **unblocks** a failing project gate, provided that:
+
+    * the project's PTL +1's the change
+    * the patch does not affect any other project's testing gates
+    * the patch does not cause any negative side effects
+  * If fixing and removing the faulty plugin (which leads to fail
+    voting ``tempest-tox-plugin-sanity-check`` job) and unblock the
+    tempest gate
+
+  Note that such a policy should be used judiciously, as we should strive to
+  have two +2's on each patch set, prior to approval.
+
+.. _example: https://review.opendev.org/#/c/611032/

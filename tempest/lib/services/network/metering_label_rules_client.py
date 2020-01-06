@@ -20,17 +20,24 @@ class MeteringLabelRulesClient(base.BaseNetworkClient):
 
         For a full list of available parameters, please refer to the official
         API reference:
-        https://developer.openstack.org/api-ref/network/v2/index.html#create-metering-label-rule
+        https://docs.openstack.org/api-ref/network/v2/index.html#create-metering-label-rule
         """
         uri = '/metering/metering-label-rules'
         post_data = {'metering_label_rule': kwargs}
         return self.create_resource(uri, post_data)
 
     def show_metering_label_rule(self, metering_label_rule_id, **fields):
+        """Show metering label rule.
+
+        For a full list of available parameters, please refer to the official
+        API reference:
+        https://docs.openstack.org/api-ref/network/v2/index.html#show-metering-label-rule-details
+        """
         uri = '/metering/metering-label-rules/%s' % metering_label_rule_id
         return self.show_resource(uri, **fields)
 
     def delete_metering_label_rule(self, metering_label_rule_id):
+        """Delete metering label rule."""
         uri = '/metering/metering-label-rules/%s' % metering_label_rule_id
         return self.delete_resource(uri)
 
@@ -39,7 +46,7 @@ class MeteringLabelRulesClient(base.BaseNetworkClient):
 
         For a full list of available parameters, please refer to the official
         API reference:
-        https://developer.openstack.org/api-ref/network/v2/index.html#list-metering-label-rules
+        https://docs.openstack.org/api-ref/network/v2/index.html#list-metering-label-rules
         """
         uri = '/metering/metering-label-rules'
         return self.list_resources(uri, **filters)

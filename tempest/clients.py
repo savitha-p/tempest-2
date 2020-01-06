@@ -49,6 +49,7 @@ class Manager(clients.ServiceClients):
         self._set_image_clients()
         self._set_network_clients()
         self._set_workloadmgr_clients()
+        self.placement_client = self.placement.PlacementClient()
         # TODO(andreaf) This is maintained for backward compatibility
         # with plugins, but it should removed eventually, since it was
         # never a stable interface and it's not useful anyways
@@ -73,6 +74,9 @@ class Manager(clients.ServiceClients):
         self.network_versions_client = self.network.NetworkVersionsClient()
         self.service_providers_client = self.network.ServiceProvidersClient()
         self.tags_client = self.network.TagsClient()
+        self.qos_client = self.network.QosClient()
+        self.qos_min_bw_client = self.network.QosMinimumBandwidthRulesClient()
+        self.segments_client = self.network.SegmentsClient()
 
     def _set_image_clients(self):
         if CONF.service_available.glance:
@@ -87,10 +91,8 @@ class Manager(clients.ServiceClients):
             self.schemas_client = self.image_v2.SchemasClient()
             self.namespace_properties_client = \
                 self.image_v2.NamespacePropertiesClient()
-            self.namespace_tags_client = \
-                self.image_v2.NamespaceTagsClient()
-            self.image_versions_client = \
-                self.image_v2.VersionsClient()
+            self.namespace_tags_client = self.image_v2.NamespaceTagsClient()
+            self.image_versions_client = self.image_v2.VersionsClient()
 
     def _set_compute_clients(self):
         self.agents_client = self.compute.AgentsClient()
@@ -227,22 +229,6 @@ class Manager(clients.ServiceClients):
 
     def _set_volume_clients(self):
 
-        if CONF.volume_feature_enabled.api_v1:
-            self.backups_client = self.volume_v1.BackupsClient()
-            self.encryption_types_client = \
-                self.volume_v1.EncryptionTypesClient()
-            self.snapshots_client = self.volume_v1.SnapshotsClient()
-            self.volume_availability_zone_client = \
-                self.volume_v1.AvailabilityZoneClient()
-            self.volume_hosts_client = self.volume_v1.HostsClient()
-            self.volume_limits_client = self.volume_v1.LimitsClient()
-            self.volume_qos_client = self.volume_v1.QosSpecsClient()
-            self.volume_quotas_client = self.volume_v1.QuotasClient()
-            self.volume_services_client = self.volume_v1.ServicesClient()
-            self.volume_types_client = self.volume_v1.TypesClient()
-            self.volumes_client = self.volume_v1.VolumesClient()
-            self.volumes_extension_client = self.volume_v1.ExtensionsClient()
-
         # if only api_v3 is enabled, all these clients should be available
         if (CONF.volume_feature_enabled.api_v2 or
             CONF.volume_feature_enabled.api_v3):
@@ -305,8 +291,7 @@ class Manager(clients.ServiceClients):
                 self.volume_v3.QuotaClassesClient()
             self.volume_scheduler_stats_v2_client = \
                 self.volume_v3.SchedulerStatsClient()
-            self.volume_transfers_v2_client = \
-                self.volume_v3.TransfersClient()
+            self.volume_transfers_v2_client = self.volume_v3.TransfersClient()
             self.volume_v2_availability_zone_client = \
                 self.volume_v3.AvailabilityZoneClient()
             self.volume_v2_limits_client = self.volume_v3.LimitsClient()

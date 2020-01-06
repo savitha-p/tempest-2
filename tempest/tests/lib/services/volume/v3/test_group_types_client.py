@@ -22,10 +22,13 @@ from tempest.tests.lib.services import base
 class TestGroupTypesClient(base.BaseServiceTest):
     FAKE_CREATE_GROUP_TYPE = {
         "group_type": {
-            "name": "group-type-001",
-            "description": "Test group type 1",
-            "group_specs": {},
+            "id": "6685584b-1eac-4da6-b5c3-555430cf68ff",
+            "name": "grp-type-001",
+            "description": "group type 001",
             "is_public": True,
+            "group_specs": {
+                "consistent_group_snapshot_enabled": "<is> False"
+            }
         }
     }
 
@@ -35,7 +38,16 @@ class TestGroupTypesClient(base.BaseServiceTest):
             "name": "group-type-001",
             "description": "Test group type 1",
             "is_public": True,
-            "created_at": "20127-06-20T03:50:07Z",
+            "group_specs": {},
+        }
+    }
+
+    FAKE_INFO_DEFAULT_GROUP_TYPE = {
+        "group_type": {
+            "id": "7270c56e-6354-4528-8e8b-f54dee2232c8",
+            "name": "group-type-default",
+            "description": "default group type",
+            "is_public": True,
             "group_specs": {},
         }
     }
@@ -47,24 +59,27 @@ class TestGroupTypesClient(base.BaseServiceTest):
                 "name": "group-type-001",
                 "description": "Test group type 1",
                 "is_public": True,
-                "created_at": "2017-06-20T03:50:07Z",
-                "group_specs": {},
+                "group_specs": {
+                    "consistent_group_snapshot_enabled": "<is> False"
+                }
             },
             {
                 "id": "e479997c-650b-40a4-9dfe-77655818b0d2",
                 "name": "group-type-002",
                 "description": "Test group type 2",
                 "is_public": True,
-                "created_at": "2017-06-19T01:52:47Z",
-                "group_specs": {},
+                "group_specs": {
+                    "consistent_group_snapshot_enabled": "<is> False"
+                }
             },
             {
                 "id": "c5c4769e-213c-40a6-a568-8e797bb691d4",
                 "name": "group-type-003",
                 "description": "Test group type 3",
                 "is_public": True,
-                "created_at": "2017-06-18T06:34:32Z",
-                "group_specs": {},
+                "group_specs": {
+                    "consistent_group_snapshot_enabled": "<is> False"
+                }
             }
         ]
     }
@@ -114,6 +129,13 @@ class TestGroupTypesClient(base.BaseServiceTest):
             bytes_body,
             group_type_id="3fbbcccf-d058-4502-8844-6feeffdf4cb5")
 
+    def _test_show_default_group_type(self, bytes_body=False):
+        self.check_service_client_function(
+            self.client.show_default_group_type,
+            'tempest.lib.common.rest_client.RestClient.get',
+            self.FAKE_INFO_DEFAULT_GROUP_TYPE,
+            bytes_body)
+
     def _test_list_group_types(self, bytes_body=False):
         self.check_service_client_function(
             self.client.list_group_types,
@@ -123,15 +145,12 @@ class TestGroupTypesClient(base.BaseServiceTest):
 
     def _test_update_group_types(self, bytes_body=False):
         resp_body = copy.deepcopy(self.FAKE_INFO_GROUP_TYPE)
-        resp_body['group_type'].pop('created_at')
-
         self.check_service_client_function(
             self.client.update_group_type,
             'tempest.lib.common.rest_client.RestClient.put',
             resp_body,
             bytes_body,
-            group_type_id="3fbbcccf-d058-4502-8844-6feeffdf4cb5",
-            name='updated-group-type-name')
+            group_type_id="3fbbcccf-d058-4502-8844-6feeffdf4cb5")
 
     def _test_create_or_update_group_type_specs(self, bytes_body=False):
         group_specs = self.FAKE_CREATE_GROUP_TYPE_SPECS['group_specs']
@@ -191,6 +210,12 @@ class TestGroupTypesClient(base.BaseServiceTest):
 
     def test_show_group_type_with_bytes_body(self):
         self._test_show_group_type(bytes_body=True)
+
+    def test_show_default_group_type_with_str_body(self):
+        self._test_show_default_group_type()
+
+    def test_show_default_group_type_with_bytes_body(self):
+        self._test_show_default_group_type(bytes_body=True)
 
     def test_list_group_types_with_str_body(self):
         self._test_list_group_types()

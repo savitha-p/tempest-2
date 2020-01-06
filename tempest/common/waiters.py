@@ -104,8 +104,8 @@ def wait_for_server_termination(client, server_id, ignore_error=False):
         body = client.show_server(server_id)['server']
     except lib_exc.NotFound:
         return
-    old_status = server_status = body['status']
-    old_task_state = task_state = _get_task_state(body)
+    old_status = body['status']
+    old_task_state = _get_task_state(body)
     start_time = int(time.time())
     while True:
         time.sleep(client.build_interval)
@@ -121,7 +121,9 @@ def wait_for_server_termination(client, server_id, ignore_error=False):
                      '/'.join((server_status, str(task_state))),
                      time.time() - start_time)
         if server_status == 'ERROR' and not ignore_error:
-            raise lib_exc.DeleteErrorException(resource_id=server_id)
+            raise lib_exc.DeleteErrorException(
+                "Server %s failed to delete and is in ERROR status" %
+                server_id)
 
         if int(time.time()) - start_time >= client.build_timeout:
             raise lib_exc.TimeoutException
@@ -202,6 +204,8 @@ def wait_for_volume_resource_status(client, resource_id, status):
                 resource_name=resource_name, resource_id=resource_id)
         if resource_name == 'volume' and resource_status == 'error_restoring':
             raise exceptions.VolumeRestoreErrorException(volume_id=resource_id)
+        if resource_status == 'error_extending' and resource_status != status:
+            raise exceptions.VolumeExtendErrorException(volume_id=resource_id)
 
         if int(time.time()) - start >= client.build_timeout:
             message = ('%s %s failed to reach %s status (current %s) '
@@ -211,6 +215,31 @@ def wait_for_volume_resource_status(client, resource_id, status):
             raise lib_exc.TimeoutException(message)
     LOG.info('%s %s reached %s after waiting for %f seconds',
              resource_name, resource_id, status, time.time() - start)
+
+
+def wait_for_volume_migration(client, volume_id, new_host):
+    """Waits for a Volume to move to a new host."""
+    body = client.show_volume(volume_id)['volume']
+    host = body['os-vol-host-attr:host']
+    migration_status = body['migration_status']
+    start = int(time.time())
+
+    # new_host is hostname@backend while current_host is hostname@backend#type
+    while migration_status != 'success' or new_host not in host:
+        time.sleep(client.build_interval)
+        body = client.show_volume(volume_id)['volume']
+        host = body['os-vol-host-attr:host']
+        migration_status = body['migration_status']
+
+        if migration_status == 'error':
+            message = ('volume %s failed to migrate.' % (volume_id))
+            raise lib_exc.TempestException(message)
+
+        if int(time.time()) - start >= client.build_timeout:
+            message = ('Volume %s failed to migrate to %s (current %s) '
+                       'within the required time (%s s).' %
+                       (volume_id, new_host, host, client.build_timeout))
+            raise lib_exc.TimeoutException(message)
 
 
 def wait_for_volume_retype(client, volume_id, new_volume_type):

@@ -86,6 +86,7 @@ class WorkspaceManager(object):
     def rename_workspace(self, old_name, new_name):
         self._populate()
         self._name_exists(old_name)
+        self._invalid_name_check(new_name)
         self._workspace_name_exists(new_name)
         self.workspaces[new_name] = self.workspaces.pop(old_name)
         self._write_file()
@@ -93,7 +94,7 @@ class WorkspaceManager(object):
     @lockutils.synchronized('workspaces', external=True)
     def move_workspace(self, name, path):
         self._populate()
-        path = os.path.abspath(os.path.expanduser(path))
+        path = os.path.abspath(os.path.expanduser(path)) if path else path
         self._name_exists(name)
         self._validate_path(path)
         self.workspaces[name] = path
@@ -114,6 +115,7 @@ class WorkspaceManager(object):
 
     @lockutils.synchronized('workspaces', external=True)
     def remove_workspace_directory(self, workspace_path):
+        self._validate_path(workspace_path)
         shutil.rmtree(workspace_path)
 
     @lockutils.synchronized('workspaces', external=True)
@@ -128,7 +130,17 @@ class WorkspaceManager(object):
                 name))
             sys.exit(1)
 
+    def _invalid_name_check(self, name):
+        if not name:
+            print("None or empty name is specified."
+                  " Please specify correct name for workspace.")
+            sys.exit(1)
+
     def _validate_path(self, path):
+        if not path:
+            print("None or empty path is specified for workspace."
+                  " Please specify correct workspace path.")
+            sys.exit(1)
         if not os.path.exists(path):
             print("Path does not exist.")
             sys.exit(1)
@@ -137,10 +149,11 @@ class WorkspaceManager(object):
     def register_new_workspace(self, name, path, init=False):
         """Adds the new workspace and writes out the new workspace config"""
         self._populate()
-        path = os.path.abspath(os.path.expanduser(path))
+        path = os.path.abspath(os.path.expanduser(path)) if path else path
         # This only happens when register is called from outside of init
         if not init:
             self._validate_path(path)
+        self._invalid_name_check(name)
         self._workspace_name_exists(name)
         self.workspaces[name] = path
         self._write_file()

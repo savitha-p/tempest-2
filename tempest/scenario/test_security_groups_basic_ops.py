@@ -63,28 +63,28 @@ class TestSecurityGroupsBasicOps(manager.NetworkScenarioTest):
                 a. a security group open to incoming ssh connection
                 b. a VM with a floating ip
             5. create a general empty security group (same as "default", but
-            without rules allowing in-tenant traffic)
+               without rules allowing in-tenant traffic)
 
     tests:
         1. _verify_network_details
         2. _verify_mac_addr: for each access point verify that
-        (subnet, fix_ip, mac address) are as defined in the port list
+           (subnet, fix_ip, mac address) are as defined in the port list
         3. _test_in_tenant_block: test that in-tenant traffic is disabled
-        without rules allowing it
+           without rules allowing it
         4. _test_in_tenant_allow: test that in-tenant traffic is enabled
-        once an appropriate rule has been created
+           once an appropriate rule has been created
         5. _test_cross_tenant_block: test that cross-tenant traffic is disabled
-        without a rule allowing it on destination tenant
+           without a rule allowing it on destination tenant
         6. _test_cross_tenant_allow:
             * test that cross-tenant traffic is enabled once an appropriate
-            rule has been created on destination tenant.
+              rule has been created on destination tenant.
             * test that reverse traffic is still blocked
             * test than reverse traffic is enabled once an appropriate rule has
-            been created on source tenant
-        7._test_port_update_new_security_group:
-           * test that traffic is blocked with default security group
-           * test that traffic is enabled after updating port with new security
-           group having appropriate rule
+              been created on source tenant
+        7. _test_port_update_new_security_group:
+            * test that traffic is blocked with default security group
+            * test that traffic is enabled after updating port with new
+              security group having appropriate rule
         8. _test_multiple_security_groups: test multiple security groups can be
            associated with the vm
 
@@ -93,11 +93,13 @@ class TestSecurityGroupsBasicOps(manager.NetworkScenarioTest):
         2. Public network is defined and reachable from the Tempest host
         3. Public router can either be:
             * defined, in which case all tenants networks can connect directly
-            to it, and cross tenant check will be done on the private IP of the
-            destination tenant
+              to it, and cross tenant check will be done on the private IP of
+              the destination tenant
+
             or
+
             * not defined (empty string), in which case each tenant will have
-            its own router connected to the public network
+              its own router connected to the public network
     """
 
     credentials = ['primary', 'alt', 'admin']
@@ -282,11 +284,8 @@ class TestSecurityGroupsBasicOps(manager.NetworkScenarioTest):
 
         # Verify servers are on different compute nodes
         if self.multi_node:
-            adm_get_server = self.os_admin.servers_client.show_server
-            new_host = adm_get_server(server["id"])["server"][
-                "OS-EXT-SRV-ATTR:host"]
-            host_list = [adm_get_server(s)["server"]["OS-EXT-SRV-ATTR:host"]
-                         for s in self.servers]
+            new_host = self.get_host_for_server(server["id"])
+            host_list = [self.get_host_for_server(s) for s in self.servers]
             self.assertNotIn(new_host, host_list,
                              message="Failed to boot servers on different "
                                      "Compute nodes.")
@@ -396,24 +395,22 @@ class TestSecurityGroupsBasicOps(manager.NetworkScenarioTest):
             self.check_remote_connectivity(source=access_point_ssh,
                                            dest=self._get_server_ip(server))
 
-    def _test_cross_tenant_block(self, source_tenant, dest_tenant):
+    def _test_cross_tenant_block(self, source_tenant, dest_tenant, ruleset):
         # if public router isn't defined, then dest_tenant access is via
         # floating-ip
+        protocol = ruleset['protocol']
         access_point_ssh = self._connect_to_access_point(source_tenant)
         ip = self._get_server_ip(dest_tenant.access_point,
                                  floating=self.floating_ip_access)
         self.check_remote_connectivity(source=access_point_ssh, dest=ip,
-                                       should_succeed=False)
+                                       should_succeed=False, protocol=protocol)
 
-    def _test_cross_tenant_allow(self, source_tenant, dest_tenant):
+    def _test_cross_tenant_allow(self, source_tenant, dest_tenant, ruleset):
         """check for each direction:
 
         creating rule for tenant incoming traffic enables only 1way traffic
         """
-        ruleset = dict(
-            protocol='icmp',
-            direction='ingress'
-        )
+        protocol = ruleset['protocol']
         sec_group_rules_client = (
             dest_tenant.manager.security_group_rules_client)
         self._create_security_group_rule(
@@ -424,10 +421,10 @@ class TestSecurityGroupsBasicOps(manager.NetworkScenarioTest):
         access_point_ssh = self._connect_to_access_point(source_tenant)
         ip = self._get_server_ip(dest_tenant.access_point,
                                  floating=self.floating_ip_access)
-        self.check_remote_connectivity(access_point_ssh, ip)
+        self.check_remote_connectivity(access_point_ssh, ip, protocol=protocol)
 
         # test that reverse traffic is still blocked
-        self._test_cross_tenant_block(dest_tenant, source_tenant)
+        self._test_cross_tenant_block(dest_tenant, source_tenant, ruleset)
 
         # allow reverse traffic and check
         sec_group_rules_client = (
@@ -441,7 +438,8 @@ class TestSecurityGroupsBasicOps(manager.NetworkScenarioTest):
         access_point_ssh_2 = self._connect_to_access_point(dest_tenant)
         ip = self._get_server_ip(source_tenant.access_point,
                                  floating=self.floating_ip_access)
-        self.check_remote_connectivity(access_point_ssh_2, ip)
+        self.check_remote_connectivity(access_point_ssh_2, ip,
+                                       protocol=protocol)
 
     def _verify_mac_addr(self, tenant):
         """Verify that VM has the same ip, mac as listed in port"""
@@ -471,6 +469,17 @@ class TestSecurityGroupsBasicOps(manager.NetworkScenarioTest):
                 self._log_console_output(
                     servers=[tenant.access_point], client=client)
 
+    def _create_protocol_ruleset(self, protocol, port=80):
+        if protocol == 'icmp':
+            ruleset = dict(protocol='icmp',
+                           direction='ingress')
+        else:
+            ruleset = dict(protocol=protocol,
+                           port_range_min=port,
+                           port_range_max=port,
+                           direction='ingress')
+        return ruleset
+
     @decorators.idempotent_id('e79f879e-debb-440c-a7e4-efeda05b6848')
     @utils.services('compute', 'network')
     def test_cross_tenant_traffic(self):
@@ -485,8 +494,18 @@ class TestSecurityGroupsBasicOps(manager.NetworkScenarioTest):
             # cross tenant check
             source_tenant = self.primary_tenant
             dest_tenant = self.alt_tenant
-            self._test_cross_tenant_block(source_tenant, dest_tenant)
-            self._test_cross_tenant_allow(source_tenant, dest_tenant)
+
+            protocol = CONF.scenario.protocol
+            LOG.debug("Testing cross tenant traffic for %s protocol",
+                      protocol)
+            if protocol in ['udp', 'tcp']:
+                for tenant in [source_tenant, dest_tenant]:
+                    access_point = self._connect_to_access_point(tenant)
+                    access_point.nc_listen_host(protocol=protocol)
+
+            ruleset = self._create_protocol_ruleset(protocol)
+            self._test_cross_tenant_block(source_tenant, dest_tenant, ruleset)
+            self._test_cross_tenant_allow(source_tenant, dest_tenant, ruleset)
         except Exception:
             self._log_console_output_for_all_tenants()
             raise

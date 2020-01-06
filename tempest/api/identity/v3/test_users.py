@@ -77,6 +77,10 @@ class IdentityV3UsersTest(base.BaseIdentityV3Test):
         self.non_admin_users_client.auth_provider.set_auth()
 
     @decorators.idempotent_id('ad71bd23-12ad-426b-bb8b-195d2b635f27')
+    @testtools.skipIf(CONF.identity_feature_enabled.immutable_user_source,
+                      'Skipped because environment has an '
+                      'immutable user source and solely '
+                      'provides read-only access to users.')
     def test_user_update_own_password(self):
         old_pass = self.creds.password
         old_token = self.non_admin_client.token
@@ -102,6 +106,10 @@ class IdentityV3UsersTest(base.BaseIdentityV3Test):
     @testtools.skipUnless(CONF.identity_feature_enabled.security_compliance,
                           'Security compliance not available.')
     @decorators.idempotent_id('941784ee-5342-4571-959b-b80dd2cea516')
+    @testtools.skipIf(CONF.identity_feature_enabled.immutable_user_source,
+                      'Skipped because environment has an '
+                      'immutable user source and solely '
+                      'provides read-only access to users.')
     def test_password_history_check_self_service_api(self):
         old_pass = self.creds.password
         new_pass1 = data_utils.rand_password()
@@ -133,6 +141,13 @@ class IdentityV3UsersTest(base.BaseIdentityV3Test):
                           'Security compliance not available.')
     @decorators.idempotent_id('a7ad8bbf-2cff-4520-8c1d-96332e151658')
     def test_user_account_lockout(self):
+        if (CONF.identity.user_lockout_failure_attempts <= 0 or
+                CONF.identity.user_lockout_duration <= 0):
+            raise self.skipException(
+                "Both CONF.identity.user_lockout_failure_attempts and "
+                "CONF.identity.user_lockout_duration should be greater than "
+                "zero to test this feature")
+
         password = self.creds.password
 
         # First, we login using the correct credentials

@@ -15,11 +15,9 @@
 
 from tempest.api.network import base_security_groups as base
 from tempest.common import utils
-from tempest import config
 from tempest.lib.common.utils import data_utils
+from tempest.lib.common.utils import test_utils
 from tempest.lib import decorators
-
-CONF = config.CONF
 
 
 class SecGroupTest(base.BaseSecGroupTest):
@@ -52,8 +50,8 @@ class SecGroupTest(base.BaseSecGroupTest):
         )
 
         sec_group_rule = rule_create_body['security_group_rule']
-        self.addCleanup(self._delete_security_group_rule,
-                        sec_group_rule['id'])
+        self.addCleanup(test_utils.call_and_ignore_notfound_exc,
+                        self._delete_security_group_rule, sec_group_rule['id'])
 
         expected = {'direction': direction, 'protocol': protocol,
                     'ethertype': ethertype, 'port_range_min': port_range_min,
@@ -107,6 +105,8 @@ class SecGroupTest(base.BaseSecGroupTest):
         self.assertEqual(show_body['security_group']['name'], new_name)
         self.assertEqual(show_body['security_group']['description'],
                          new_description)
+        # Delete security group
+        self._delete_security_group(group_create_body['security_group']['id'])
 
     @decorators.attr(type='smoke')
     @decorators.idempotent_id('cfb99e0e-7410-4a3d-8a0c-959a63ee77e9')
@@ -141,6 +141,8 @@ class SecGroupTest(base.BaseSecGroupTest):
                          for rule in rule_list_body['security_group_rules']]
             self.assertIn(rule_create_body['security_group_rule']['id'],
                           rule_list)
+            self._delete_security_group_rule(
+                rule_create_body['security_group_rule']['id'])
 
     @decorators.idempotent_id('87dfbcf9-1849-43ea-b1e4-efa3eeae9f71')
     def test_create_security_group_rule_with_additional_args(self):
@@ -173,7 +175,14 @@ class SecGroupTest(base.BaseSecGroupTest):
 
         sg_id = group_create_body['security_group']['id']
         direction = 'ingress'
-        protocol = 'icmp'
+        # The Neutron API accepts 'icmp', 'icmpv6' and 'ipv6-icmp' for
+        # IPv6 ICMP protocol names, but the latter is preferred and the
+        # others considered "legacy".  Use 'ipv6-icmp' as the API could
+        # change to return only that value, see
+        # https://review.opendev.org/#/c/453346/
+        # The neutron-tempest-plugin API tests pass all three and verify
+        # the output, so there is no need to duplicate that here.
+        protocol = 'ipv6-icmp' if self._ip_version == 6 else 'icmp'
         icmp_type_codes = [(3, 2), (3, 0), (8, 0), (0, 0), (11, None)]
         for icmp_type, icmp_code in icmp_type_codes:
             self._create_verify_security_group_rule(sg_id, direction,

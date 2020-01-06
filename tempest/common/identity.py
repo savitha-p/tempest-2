@@ -26,7 +26,7 @@ def get_project_by_name(client, project_name):
         if project['name'] == project_name:
             return project
     raise lib_exc.NotFound('No such project(%s) in %s' % (project_name,
-                           projects))
+                                                          projects))
 
 
 def get_tenant_by_name(client, tenant_name):
@@ -64,7 +64,8 @@ def identity_utils(clients):
     should not be used for testing identity features.
 
     :param clients: a client manager.
-    :return
+    :return: v2 or v3 of CredsClient
+    :rtype: V2CredsClient or V3CredsClient
     """
     if CONF.identity.auth_version == 'v2':
         client = clients.identity_client

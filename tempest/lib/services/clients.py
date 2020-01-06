@@ -18,7 +18,6 @@ import copy
 import importlib
 import inspect
 import sys
-import warnings
 
 from debtcollector import removals
 from oslo_log import log as logging
@@ -32,9 +31,9 @@ from tempest.lib.services import identity
 from tempest.lib.services import image
 from tempest.lib.services import network
 from tempest.lib.services import object_storage
+from tempest.lib.services import placement
 from tempest.lib.services import volume
 
-warnings.simplefilter("once")
 LOG = logging.getLogger(__name__)
 
 
@@ -46,6 +45,7 @@ def tempest_modules():
     """
     return {
         'compute': compute,
+        'placement': placement,
         'identity.v2': identity.v2,
         'identity.v3': identity.v3,
         'image.v1': image.v1,

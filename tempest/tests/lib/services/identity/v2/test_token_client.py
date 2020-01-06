@@ -12,9 +12,8 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import json
-
 import mock
+from oslo_serialization import jsonutils as json
 
 from tempest.lib.common import rest_client
 from tempest.lib import exceptions
@@ -87,6 +86,9 @@ class TestTokenClientV2(base.TestCase):
         with mock.patch.object(token_client_v2, 'raw_request') as mock_raw_r:
             mock_raw_r.return_value = response, body
             resp, body = token_client_v2.request('GET', 'fake_uri')
+        mock_raw_r.assert_called_once_with('fake_uri', 'GET',
+                                           headers=mock.ANY, body=None,
+                                           log_req_body='<omitted>')
         self.assertIsInstance(body, dict)
 
     def test_request_with_bytes_body(self):

@@ -20,6 +20,7 @@ from tempest.common import identity
 from tempest.common import utils
 from tempest import config
 from tempest.lib.common.utils import data_utils
+from tempest.lib.common.utils import test_utils
 from tempest.lib import decorators
 
 CONF = config.CONF
@@ -32,14 +33,14 @@ class RoutersAdminTest(base.BaseAdminNetworkTest):
 
     def _cleanup_router(self, router):
         self.delete_router(router)
-        self.routers.remove(router)
 
     def _create_router(self, name=None, admin_state_up=False,
                        external_network_id=None, enable_snat=None):
         # associate a cleanup with created routers to avoid quota limits
         router = self.create_router(name, admin_state_up,
                                     external_network_id, enable_snat)
-        self.addCleanup(self._cleanup_router, router)
+        self.addCleanup(test_utils.call_and_ignore_notfound_exc,
+                        self._cleanup_router, router)
         return router
 
     @classmethod
@@ -63,7 +64,8 @@ class RoutersAdminTest(base.BaseAdminNetworkTest):
         name = data_utils.rand_name('router-')
         create_body = self.admin_routers_client.create_router(
             name=name, tenant_id=project_id)
-        self.addCleanup(self.admin_routers_client.delete_router,
+        self.addCleanup(test_utils.call_and_ignore_notfound_exc,
+                        self.admin_routers_client.delete_router,
                         create_body['router']['id'])
         self.assertEqual(project_id, create_body['router']['tenant_id'])
 
@@ -93,7 +95,8 @@ class RoutersAdminTest(base.BaseAdminNetworkTest):
                 'enable_snat': enable_snat}
             create_body = self.admin_routers_client.create_router(
                 name=name, external_gateway_info=external_gateway_info)
-            self.addCleanup(self.admin_routers_client.delete_router,
+            self.addCleanup(test_utils.call_and_ignore_notfound_exc,
+                            self.admin_routers_client.delete_router,
                             create_body['router']['id'])
             # Verify snat attributes after router creation
             self._verify_router_gateway(create_body['router']['id'],
@@ -112,7 +115,8 @@ class RoutersAdminTest(base.BaseAdminNetworkTest):
     def _verify_gateway_port(self, router_id):
         list_body = self.admin_ports_client.list_ports(
             network_id=CONF.network.public_network_id,
-            device_id=router_id)
+            device_id=router_id,
+            device_owner="network:router_gateway")
         self.assertEqual(len(list_body['ports']), 1)
         gw_port = list_body['ports'][0]
         fixed_ips = gw_port['fixed_ips']

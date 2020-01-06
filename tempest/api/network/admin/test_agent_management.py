@@ -15,7 +15,9 @@
 from tempest.api.network import base
 from tempest.common import tempest_fixtures as fixtures
 from tempest.common import utils
+from tempest.lib.common.utils import data_utils
 from tempest.lib import decorators
+from tempest.lib import exceptions as lib_exc
 
 
 class AgentManagementTestJSON(base.BaseAdminNetworkTest):
@@ -45,11 +47,6 @@ class AgentManagementTestJSON(base.BaseAdminNetworkTest):
             agent.pop('heartbeat_timestamp', None)
             agent.pop('configurations', None)
         self.assertIn(self.agent, agents)
-
-    @decorators.idempotent_id('e335be47-b9a1-46fd-be30-0874c0b751e6')
-    def test_list_agents_non_admin(self):
-        body = self.agents_client.list_agents()
-        self.assertEmpty(body["agents"])
 
     @decorators.idempotent_id('869bc8e8-0fda-4a30-9b71-f8a7cf58ca9f')
     def test_show_agent(self):
@@ -86,3 +83,11 @@ class AgentManagementTestJSON(base.BaseAdminNetworkTest):
         origin_agent = {'description': description}
         self.admin_agents_client.update_agent(agent_id=self.agent['id'],
                                               agent=origin_agent)
+
+    @decorators.idempotent_id('b33af888-b6ac-4e68-a0ca-0444c2696cf9')
+    @decorators.attr(type=['negative'])
+    def test_delete_agent_negative(self):
+        non_existent_id = data_utils.rand_uuid()
+        self.assertRaises(
+            lib_exc.NotFound,
+            self.admin_agents_client.delete_agent, non_existent_id)

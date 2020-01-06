@@ -14,7 +14,10 @@
 #    under the License.
 
 from tempest.api.network import base
+from tempest.common import utils
 from tempest import config
+from tempest.lib.common.utils import data_utils
+from tempest.lib.common.utils import test_utils
 from tempest.lib import decorators
 
 CONF = config.CONF
@@ -31,26 +34,35 @@ class PortsAdminExtendedAttrsTestJSON(base.BaseAdminNetworkTest):
     def resource_setup(cls):
         super(PortsAdminExtendedAttrsTestJSON, cls).resource_setup()
         cls.network = cls.create_network()
-        hyper_list = cls.hyper_client.list_hypervisors()
-        cls.host_id = hyper_list['hypervisors'][0]['hypervisor_hostname']
+        if CONF.service_available.nova:
+            hyper_list = cls.hyper_client.list_hypervisors()
+            cls.host_id = hyper_list['hypervisors'][0]['hypervisor_hostname']
 
     @decorators.idempotent_id('8e8569c1-9ac7-44db-8bc1-f5fb2814f29b')
+    @utils.services('compute')
     def test_create_port_binding_ext_attr(self):
         post_body = {"network_id": self.network['id'],
-                     "binding:host_id": self.host_id}
+                     "binding:host_id": self.host_id,
+                     "name": data_utils.rand_name(self.__class__.__name__)}
         body = self.admin_ports_client.create_port(**post_body)
         port = body['port']
-        self.addCleanup(self.admin_ports_client.delete_port, port['id'])
+        self.addCleanup(
+            test_utils.call_and_ignore_notfound_exc,
+            self.admin_ports_client.delete_port, port['id'])
         host_id = port['binding:host_id']
         self.assertIsNotNone(host_id)
         self.assertEqual(self.host_id, host_id)
 
     @decorators.idempotent_id('6f6c412c-711f-444d-8502-0ac30fbf5dd5')
+    @utils.services('compute')
     def test_update_port_binding_ext_attr(self):
-        post_body = {"network_id": self.network['id']}
+        post_body = {"network_id": self.network['id'],
+                     "name": data_utils.rand_name(self.__class__.__name__)}
         body = self.admin_ports_client.create_port(**post_body)
         port = body['port']
-        self.addCleanup(self.admin_ports_client.delete_port, port['id'])
+        self.addCleanup(
+            test_utils.call_and_ignore_notfound_exc,
+            self.admin_ports_client.delete_port, port['id'])
         update_body = {"binding:host_id": self.host_id}
         body = self.admin_ports_client.update_port(port['id'], **update_body)
         updated_port = body['port']
@@ -59,12 +71,16 @@ class PortsAdminExtendedAttrsTestJSON(base.BaseAdminNetworkTest):
         self.assertEqual(self.host_id, host_id)
 
     @decorators.idempotent_id('1c82a44a-6c6e-48ff-89e1-abe7eaf8f9f8')
+    @utils.services('compute')
     def test_list_ports_binding_ext_attr(self):
         # Create a new port
-        post_body = {"network_id": self.network['id']}
+        post_body = {"network_id": self.network['id'],
+                     "name": data_utils.rand_name(self.__class__.__name__)}
         body = self.admin_ports_client.create_port(**post_body)
         port = body['port']
-        self.addCleanup(self.admin_ports_client.delete_port, port['id'])
+        self.addCleanup(
+            test_utils.call_and_ignore_notfound_exc,
+            self.admin_ports_client.delete_port, port['id'])
 
         # Update the port's binding attributes so that is now 'bound'
         # to a host
@@ -86,9 +102,11 @@ class PortsAdminExtendedAttrsTestJSON(base.BaseAdminNetworkTest):
     @decorators.idempotent_id('b54ac0ff-35fc-4c79-9ca3-c7dbd4ea4f13')
     def test_show_port_binding_ext_attr(self):
         body = self.admin_ports_client.create_port(
+            name=data_utils.rand_name(self.__class__.__name__),
             network_id=self.network['id'])
         port = body['port']
-        self.addCleanup(self.admin_ports_client.delete_port, port['id'])
+        self.addCleanup(test_utils.call_and_ignore_notfound_exc,
+                        self.admin_ports_client.delete_port, port['id'])
         body = self.admin_ports_client.show_port(port['id'])
         show_port = body['port']
         self.assertEqual(port['binding:host_id'],

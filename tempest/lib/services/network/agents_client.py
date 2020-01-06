@@ -22,7 +22,7 @@ class AgentsClient(base.BaseNetworkClient):
 
         For a full list of available parameters, please refer to the official
         API reference:
-        https://developer.openstack.org/api-ref/network/v2/#update-agent
+        https://docs.openstack.org/api-ref/network/v2/#update-agent
         """
         uri = '/agents/%s' % agent_id
         return self.update_resource(uri, kwargs)
@@ -32,17 +32,27 @@ class AgentsClient(base.BaseNetworkClient):
 
         For a full list of available parameters, please refer to the official
         API reference:
-        https://developer.openstack.org/api-ref/network/v2/#show-agent-details
+        https://docs.openstack.org/api-ref/network/v2/#show-agent-details
         """
         uri = '/agents/%s' % agent_id
         return self.show_resource(uri, **fields)
+
+    def delete_agent(self, agent_id):
+        """Delete agent.
+
+        For a full list of available parameters, please refer to the official
+        API reference:
+        https://docs.openstack.org/api-ref/network/v2/index.html#delete-agent
+        """
+        uri = '/agents/%s' % agent_id
+        return self.delete_resource(uri)
 
     def list_agents(self, **filters):
         """List all agents.
 
         For a full list of available parameters, please refer to the official
         API reference:
-        https://developer.openstack.org/api-ref/network/v2/#list-all-agents
+        https://docs.openstack.org/api-ref/network/v2/#list-all-agents
         """
         uri = '/agents'
         return self.list_resources(uri, **filters)
@@ -52,7 +62,7 @@ class AgentsClient(base.BaseNetworkClient):
 
         For a full list of available parameters, please refer to the official
         API reference:
-        https://developer.openstack.org/api-ref/network/v2/#list-routers-hosted-by-an-l3-agent
+        https://docs.openstack.org/api-ref/network/v2/#list-routers-hosted-by-an-l3-agent
         """
         uri = '/agents/%s/l3-routers' % agent_id
         return self.list_resources(uri)
@@ -62,7 +72,7 @@ class AgentsClient(base.BaseNetworkClient):
 
         For a full list of available parameters, please refer to the official
         API reference:
-        https://developer.openstack.org/api-ref/network/v2/#schedule-router-to-an-l3-agent
+        https://docs.openstack.org/api-ref/network/v2/#schedule-router-to-an-l3-agent
         """
         uri = '/agents/%s/l3-routers' % agent_id
         return self.create_resource(uri, kwargs, expect_empty_body=True)
@@ -72,7 +82,7 @@ class AgentsClient(base.BaseNetworkClient):
 
         For a full list of available parameters, please refer to the official
         API reference:
-        https://developer.openstack.org/api-ref/network/v2/#remove-l3-router-from-an-l3-agent
+        https://docs.openstack.org/api-ref/network/v2/#remove-l3-router-from-an-l3-agent
         """
         uri = '/agents/%s/l3-routers/%s' % (agent_id, router_id)
         return self.delete_resource(uri)
@@ -91,7 +101,7 @@ class AgentsClient(base.BaseNetworkClient):
 
         For a full list of available parameters, please refer to the official
         API reference:
-        https://developer.openstack.org/api-ref/network/v2/#schedule-a-network-to-a-dhcp-agent
+        https://docs.openstack.org/api-ref/network/v2/#schedule-a-network-to-a-dhcp-agent
         """
         uri = '/agents/%s/dhcp-networks' % agent_id
         return self.create_resource(uri, kwargs, expect_empty_body=True)

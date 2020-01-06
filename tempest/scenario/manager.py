@@ -28,6 +28,8 @@ from tempest.common.utils import net_utils
 from tempest.common import waiters
 from tempest import config
 from tempest import exceptions
+from tempest.lib.common import api_microversion_fixture
+from tempest.lib.common import api_version_utils
 from tempest.lib.common.utils import data_utils
 from tempest.lib.common.utils import test_utils
 from tempest.lib import exceptions as lib_exc
@@ -37,11 +39,56 @@ CONF = config.CONF
 
 LOG = log.getLogger(__name__)
 
+LATEST_MICROVERSION = 'latest'
+
 
 class ScenarioTest(tempest.test.BaseTestCase):
     """Base class for scenario tests. Uses tempest own clients. """
 
     credentials = ['primary']
+
+    compute_min_microversion = None
+    compute_max_microversion = LATEST_MICROVERSION
+    volume_min_microversion = None
+    volume_max_microversion = LATEST_MICROVERSION
+    placement_min_microversion = None
+    placement_max_microversion = LATEST_MICROVERSION
+
+    @classmethod
+    def skip_checks(cls):
+        super(ScenarioTest, cls).skip_checks()
+        api_version_utils.check_skip_with_microversion(
+            cls.compute_min_microversion, cls.compute_max_microversion,
+            CONF.compute.min_microversion, CONF.compute.max_microversion)
+        api_version_utils.check_skip_with_microversion(
+            cls.volume_min_microversion, cls.volume_max_microversion,
+            CONF.volume.min_microversion, CONF.volume.max_microversion)
+        api_version_utils.check_skip_with_microversion(
+            cls.placement_min_microversion, cls.placement_max_microversion,
+            CONF.placement.min_microversion, CONF.placement.max_microversion)
+
+    @classmethod
+    def resource_setup(cls):
+        super(ScenarioTest, cls).resource_setup()
+        cls.compute_request_microversion = (
+            api_version_utils.select_request_microversion(
+                cls.compute_min_microversion,
+                CONF.compute.min_microversion))
+        cls.volume_request_microversion = (
+            api_version_utils.select_request_microversion(
+                cls.volume_min_microversion,
+                CONF.volume.min_microversion))
+        cls.placement_request_microversion = (
+            api_version_utils.select_request_microversion(
+                cls.placement_min_microversion,
+                CONF.placement.min_microversion))
+
+    def setUp(self):
+        super(ScenarioTest, self).setUp()
+        self.useFixture(api_microversion_fixture.APIMicroversionFixture(
+            compute_microversion=self.compute_request_microversion,
+            volume_microversion=self.volume_request_microversion,
+            placement_microversion=self.placement_request_microversion))
 
     @classmethod
     def setup_clients(cls):
@@ -125,6 +172,27 @@ class ScenarioTest(tempest.test.BaseTestCase):
         returns a test server. The purpose of this wrapper is to minimize
         the impact on the code of the tests already using this
         function.
+
+        :param **kwargs:
+            See extra parameters below
+
+        :Keyword Arguments:
+            * *vnic_type* (``string``) --
+              used when launching instances with pre-configured ports.
+              Examples:
+                normal: a traditional virtual port that is either attached
+                        to a linux bridge or an openvswitch bridge on a
+                        compute node.
+                direct: an SR-IOV port that is directly attached to a VM
+                macvtap: an SR-IOV port that is attached to a VM via a macvtap
+                         device.
+              Defaults to ``CONF.network.port_vnic_type``.
+            * *port_profile* (``dict``) --
+              This attribute is a dictionary that can be used (with admin
+              credentials) to supply information influencing the binding of
+              the port.
+              example: port_profile = "capabilities:[switchdev]"
+              Defaults to ``CONF.network.port_profile``.
         """
 
         # NOTE(jlanoux): As a first step, ssh checks in the scenario
@@ -143,8 +211,8 @@ class ScenarioTest(tempest.test.BaseTestCase):
         if name is None:
             name = data_utils.rand_name(self.__class__.__name__ + "-server")
 
-        vnic_type = CONF.network.port_vnic_type
-        profile = CONF.network.port_profile
+        vnic_type = kwargs.pop('vnic_type', CONF.network.port_vnic_type)
+        profile = kwargs.pop('port_profile', CONF.network.port_profile)
 
         # If vnic_type or profile are configured create port for
         # every network
@@ -166,7 +234,7 @@ class ScenarioTest(tempest.test.BaseTestCase):
                         clients.security_groups_client.list_security_groups(
                         ).get('security_groups')
                     sec_dict = dict([(s['name'], s['id'])
-                                    for s in security_groups])
+                                     for s in security_groups])
 
                     sec_groups_names = [s['name'] for s in kwargs.pop(
                         'security_groups')]
@@ -206,6 +274,10 @@ class ScenarioTest(tempest.test.BaseTestCase):
 
         tenant_network = self.get_tenant_network()
 
+        if CONF.compute.compute_volume_common_az:
+            kwargs.setdefault('availability_zone',
+                              CONF.compute.compute_volume_common_az)
+
         body, _ = compute.create_test_server(
             clients,
             tenant_network=tenant_network,
@@ -225,8 +297,12 @@ class ScenarioTest(tempest.test.BaseTestCase):
         if size is None:
             size = CONF.volume.volume_size
         if imageRef:
-            image = self.compute_images_client.show_image(imageRef)['image']
-            min_disk = image.get('minDisk')
+            if CONF.image_feature_enabled.api_v1:
+                resp = self.image_client.check_image(imageRef)
+                image = common_image.get_image_meta_from_headers(resp)
+            else:
+                image = self.image_client.show_image(imageRef)
+            min_disk = image.get('min_disk')
             size = max(size, min_disk)
         if name is None:
             name = data_utils.rand_name(self.__class__.__name__ + "-volume")
@@ -235,6 +311,11 @@ class ScenarioTest(tempest.test.BaseTestCase):
                   'imageRef': imageRef,
                   'volume_type': volume_type,
                   'size': size}
+
+        if CONF.compute.compute_volume_common_az:
+            kwargs.setdefault('availability_zone',
+                              CONF.compute.compute_volume_common_az)
+
         volume = self.volumes_client.create_volume(**kwargs)['volume']
 
         self.addCleanup(self.volumes_client.wait_for_resource_deletion,
@@ -299,11 +380,32 @@ class ScenarioTest(tempest.test.BaseTestCase):
             snapshot['id'])['snapshot']
         return snapshot
 
+    def _cleanup_volume_type(self, volume_type):
+        """Clean up a given volume type.
+
+        Ensuring all volumes associated to a type are first removed before
+        attempting to remove the type itself. This includes any image volume
+        cache volumes stored in a separate tenant to the original volumes
+        created from the type.
+        """
+        admin_volume_type_client = self.os_admin.volume_types_client_latest
+        admin_volumes_client = self.os_admin.volumes_client_latest
+        volumes = admin_volumes_client.list_volumes(
+            detail=True, params={'all_tenants': 1})['volumes']
+        type_name = volume_type['name']
+        for volume in [v for v in volumes if v['volume_type'] == type_name]:
+            test_utils.call_and_ignore_notfound_exc(
+                admin_volumes_client.delete_volume, volume['id'])
+            admin_volumes_client.wait_for_resource_deletion(volume['id'])
+        admin_volume_type_client.delete_volume_type(volume_type['id'])
+
     def create_volume_type(self, client=None, name=None, backend_name=None):
         if not client:
             client = self.os_admin.volume_types_client_latest
-        randomized_name = name or data_utils.rand_name(
-            'volume-type-' + self.__class__.__name__)
+        if not name:
+            class_name = self.__class__.__name__
+            name = data_utils.rand_name(class_name + '-volume-type')
+        randomized_name = data_utils.rand_name('scenario-type-' + name)
 
         LOG.debug("Creating a volume type: %s on backend %s",
                   randomized_name, backend_name)
@@ -313,7 +415,7 @@ class ScenarioTest(tempest.test.BaseTestCase):
 
         volume_type = client.create_volume_type(
             name=randomized_name, extra_specs=extra_specs)['volume_type']
-        self.addCleanup(client.delete_volume_type, volume_type['id'])
+        self.addCleanup(self._cleanup_volume_type, volume_type)
         return volume_type
 
     def _create_loginable_secgroup_rule(self, secgroup_id=None):
@@ -374,12 +476,12 @@ class ScenarioTest(tempest.test.BaseTestCase):
                           server=None):
         """Get a SSH client to a remote server
 
-        @param ip_address the server floating or fixed IP address to use
-                          for ssh validation
-        @param username name of the Linux account on the remote server
-        @param private_key the SSH private key to use
-        @param server: server dict, used for debugging purposes
-        @return a RemoteClient object
+        :param ip_address: the server floating or fixed IP address to use
+                           for ssh validation
+        :param username: name of the Linux account on the remote server
+        :param private_key: the SSH private key to use
+        :param server: server dict, used for debugging purposes
+        :return: a RemoteClient object
         """
 
         if username is None:
@@ -704,6 +806,11 @@ class ScenarioTest(tempest.test.BaseTestCase):
         else:
             raise lib_exc.InvalidConfiguration()
 
+    @classmethod
+    def get_host_for_server(cls, server_id):
+        server_details = cls.os_admin.servers_client.show_server(server_id)
+        return server_details['server']['OS-EXT-SRV-ATTR:host']
+
 
 class NetworkScenarioTest(ScenarioTest):
     """Base class for network scenario tests.
@@ -728,13 +835,15 @@ class NetworkScenarioTest(ScenarioTest):
     def _create_network(self, networks_client=None,
                         tenant_id=None,
                         namestart='network-smoke-',
-                        port_security_enabled=True):
+                        port_security_enabled=True, **net_dict):
         if not networks_client:
             networks_client = self.networks_client
         if not tenant_id:
             tenant_id = networks_client.tenant_id
         name = data_utils.rand_name(namestart)
         network_kwargs = dict(name=name, tenant_id=tenant_id)
+        if net_dict:
+            network_kwargs.update(net_dict)
         # Neutron disables port security by default so we have to check the
         # config before trying to create the network with port_security_enabled
         if CONF.network_feature_enabled.port_security:
@@ -928,24 +1037,33 @@ class NetworkScenarioTest(ScenarioTest):
             raise
 
     def check_remote_connectivity(self, source, dest, should_succeed=True,
-                                  nic=None):
-        """assert ping server via source ssh connection
+                                  nic=None, protocol='icmp'):
+        """check server connectivity via source ssh connection
 
-        :param source: RemoteClient: an ssh connection from which to ping
-        :param dest: an IP to ping against
-        :param should_succeed: boolean: should ping succeed or not
-        :param nic: specific network interface to ping from
+        :param source: RemoteClient: an ssh connection from which to execute
+            the check
+        :param dest: an IP to check connectivity against
+        :param should_succeed: boolean should connection succeed or not
+        :param nic: specific network interface to test connectivity from
+        :param protocol: the protocol used to test connectivity with.
+        :returns: True, if the connection succeeded and it was expected to
+            succeed. False otherwise.
         """
-        def ping_remote():
+        method_name = '%s_check' % protocol
+        connectivity_checker = getattr(source, method_name)
+
+        def connect_remote():
             try:
-                source.ping_host(dest, nic=nic)
+                connectivity_checker(dest, nic=nic)
             except lib_exc.SSHExecCommandFailed:
-                LOG.warning('Failed to ping IP: %s via a ssh connection '
-                            'from: %s.', dest, source.ssh_client.host)
+                LOG.warning('Failed to check %(protocol)s connectivity for '
+                            'IP %(dest)s via a ssh connection from: %(src)s.',
+                            dict(protocol=protocol, dest=dest,
+                                 src=source.ssh_client.host))
                 return not should_succeed
             return should_succeed
 
-        result = test_utils.call_until_true(ping_remote,
+        result = test_utils.call_until_true(connect_remote,
                                             CONF.validation.ping_timeout, 1)
         if result:
             return
@@ -1150,7 +1268,7 @@ class NetworkScenarioTest(ScenarioTest):
     def create_networks(self, networks_client=None,
                         routers_client=None, subnets_client=None,
                         tenant_id=None, dns_nameservers=None,
-                        port_security_enabled=True):
+                        port_security_enabled=True, **net_dict):
         """Create a network with a subnet connected to a router.
 
         The baremetal driver is a special case since all nodes are
@@ -1158,6 +1276,11 @@ class NetworkScenarioTest(ScenarioTest):
 
         :param tenant_id: id of tenant to create resources in.
         :param dns_nameservers: list of dns servers to send to subnet.
+        :param port_security_enabled: whether or not port_security is enabled
+        :param net_dict: a dict containing experimental network information in
+                a form like this: {'provider:network_type': 'vlan',
+                                   'provider:physical_network': 'foo',
+                                   'provider:segmentation_id': '42'}
         :returns: network, subnet, router
         """
         if CONF.network.shared_physical_network:
@@ -1177,7 +1300,8 @@ class NetworkScenarioTest(ScenarioTest):
             network = self._create_network(
                 networks_client=networks_client,
                 tenant_id=tenant_id,
-                port_security_enabled=port_security_enabled)
+                port_security_enabled=port_security_enabled,
+                **net_dict)
             router = self._get_router(client=routers_client,
                                       tenant_id=tenant_id)
             subnet_kwargs = dict(network=network,

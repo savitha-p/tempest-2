@@ -28,9 +28,9 @@
 #   * the environment variable git_dir pointing to the location
 #   * of said git repositories
 #   ) OR (
-#   * network access to the review.openstack.org Gerrit API
+#   * network access to the review.opendev.org Gerrit API
 #     working directory
-#   * network access to https://git.openstack.org/cgit
+#   * network access to https://opendev.org/openstack
 #   ))
 #
 # If a file named doc/source/data/tempest-plugins-registry.header or
@@ -41,8 +41,6 @@
 set -ex
 
 (
-declare -A plugins
-
 if [[ -r doc/source/data/tempest-plugins-registry.header ]]; then
     cat doc/source/data/tempest-plugins-registry.header
 fi
@@ -63,20 +61,37 @@ function title_underline {
     printf " ===\n"
 }
 
+function print_plugin_table {
+    title_underline ${name_col_len}
+    printf "%-3s %-${name_col_len}s %s\n" "SR" "Plugin Name" "URL"
+    title_underline ${name_col_len}
+
+    i=0
+    for plugin in $1; do
+        i=$((i+1))
+        giturl="https://opendev.org/${plugin}"
+        printf "%-3s %-${name_col_len}s %s\n" "$i" "${plugin}" "${giturl}"
+    done
+
+    title_underline ${name_col_len}
+}
+
 printf "\n\n"
-title_underline ${name_col_len}
-printf "%-3s %-${name_col_len}s %s\n" "SR" "Plugin Name" "URL"
-title_underline ${name_col_len}
+print_plugin_table "${sorted_plugins}"
 
-i=0
-for plugin in ${sorted_plugins}; do
-    i=$((i+1))
-    giturl="git://git.openstack.org/openstack/${plugin}"
-    gitlink="https://git.openstack.org/cgit/openstack/${plugin}"
-    printf "%-3s %-${name_col_len}s %s\n" "$i" "${plugin}" "\`${giturl} <${gitlink}>\`__"
-done
+printf "\n\n"
 
-title_underline ${name_col_len}
+# Print BLACKLIST
+if [[ -r doc/source/data/tempest-blacklisted-plugins-registry.header ]]; then
+    cat doc/source/data/tempest-blacklisted-plugins-registry.header
+fi
+
+blacklist=$(python tools/generate-tempest-plugins-list.py blacklist)
+name_col_len=$(echo "${blacklist}" | wc -L)
+name_col_len=$(( name_col_len + 20 ))
+
+printf "\n\n"
+print_plugin_table "${blacklist}"
 
 printf "\n\n"
 

@@ -24,10 +24,19 @@ import mock
 import six
 
 from tempest.cmd import run
+from tempest.cmd import workspace
+from tempest import config
+from tempest.lib.common.utils import data_utils
 from tempest.tests import base
+
+if six.PY2:
+    # Python 2 has not FileNotFoundError exception
+    FileNotFoundError = IOError
 
 DEVNULL = open(os.devnull, 'wb')
 atexit.register(DEVNULL.close)
+
+CONF = config.CONF
 
 
 class TestTempestRun(base.TestCase):
@@ -40,7 +49,7 @@ class TestTempestRun(base.TestCase):
         args = mock.Mock(spec=argparse.Namespace)
         setattr(args, 'smoke', False)
         setattr(args, 'regex', '')
-        self.assertIsNone(None, self.run_cmd._build_regex(args))
+        self.assertIsNone(self.run_cmd._build_regex(args))
 
     def test__build_regex_smoke(self):
         args = mock.Mock(spec=argparse.Namespace)
@@ -54,6 +63,12 @@ class TestTempestRun(base.TestCase):
         setattr(args, "regex", 'i_am_a_fun_little_regex')
         self.assertEqual(['i_am_a_fun_little_regex'],
                          self.run_cmd._build_regex(args))
+
+    def test__build_regex_smoke_regex(self):
+        args = mock.Mock(spec=argparse.Namespace)
+        setattr(args, "smoke", True)
+        setattr(args, 'regex', 'i_am_a_fun_little_regex')
+        self.assertEqual(['smoke'], self.run_cmd._build_regex(args))
 
 
 class TestRunReturnCode(base.TestCase):
@@ -97,6 +112,27 @@ class TestRunReturnCode(base.TestCase):
         subprocess.call(['stestr', 'init'])
         self.assertRunExit(['tempest', 'run', '--regex', 'passing'], 0)
 
+    def test_tempest_run_failing(self):
+        self.assertRunExit(['tempest', 'run', '--regex', 'failing'], 1)
+
+    def test_tempest_run_failing_with_stestr_repository(self):
+        subprocess.call(['stestr', 'init'])
+        self.assertRunExit(['tempest', 'run', '--regex', 'failing'], 1)
+
+    def test_tempest_run_blackregex_failing(self):
+        self.assertRunExit(['tempest', 'run', '--black-regex', 'failing'], 0)
+
+    def test_tempest_run_blackregex_failing_with_stestr_repository(self):
+        subprocess.call(['stestr', 'init'])
+        self.assertRunExit(['tempest', 'run', '--black-regex', 'failing'], 0)
+
+    def test_tempest_run_blackregex_passing(self):
+        self.assertRunExit(['tempest', 'run', '--black-regex', 'passing'], 1)
+
+    def test_tempest_run_blackregex_passing_with_stestr_repository(self):
+        subprocess.call(['stestr', 'init'])
+        self.assertRunExit(['tempest', 'run', '--black-regex', 'passing'], 1)
+
     def test_tempest_run_fails(self):
         self.assertRunExit(['tempest', 'run'], 1)
 
@@ -125,7 +161,7 @@ class TestRunReturnCode(base.TestCase):
         whitelist_file.write('passing'.encode('utf-8'))
         self.assertRunExit(['tempest', 'run', '--whitelist-file=%s' % path], 0)
 
-    def test_tempest_run_with_whitelist_with_regex(self):
+    def test_tempest_run_with_whitelist_regex_include_pass_check_fail(self):
         fd, path = tempfile.mkstemp()
         self.addCleanup(os.remove, path)
         whitelist_file = os.fdopen(fd, 'wb', 0)
@@ -134,13 +170,132 @@ class TestRunReturnCode(base.TestCase):
         self.assertRunExit(['tempest', 'run', '--whitelist-file=%s' % path,
                             '--regex', 'fail'], 1)
 
+    def test_tempest_run_with_whitelist_regex_include_pass_check_pass(self):
+        fd, path = tempfile.mkstemp()
+        self.addCleanup(os.remove, path)
+        whitelist_file = os.fdopen(fd, 'wb', 0)
+        self.addCleanup(whitelist_file.close)
+        whitelist_file.write('passing'.encode('utf-8'))
+        self.assertRunExit(['tempest', 'run', '--whitelist-file=%s' % path,
+                            '--regex', 'passing'], 0)
+
+    def test_tempest_run_with_whitelist_regex_include_fail_check_pass(self):
+        fd, path = tempfile.mkstemp()
+        self.addCleanup(os.remove, path)
+        whitelist_file = os.fdopen(fd, 'wb', 0)
+        self.addCleanup(whitelist_file.close)
+        whitelist_file.write('failing'.encode('utf-8'))
+        self.assertRunExit(['tempest', 'run', '--whitelist-file=%s' % path,
+                            '--regex', 'pass'], 1)
+
     def test_tempest_run_passes_with_config_file(self):
         self.assertRunExit(['tempest', 'run',
                             '--config-file', self.stestr_conf_file,
                             '--regex', 'passing'], 0)
 
+    def test_tempest_run_with_blacklist_failing(self):
+        fd, path = tempfile.mkstemp()
+        self.addCleanup(os.remove, path)
+        blacklist_file = os.fdopen(fd, 'wb', 0)
+        self.addCleanup(blacklist_file.close)
+        blacklist_file.write('failing'.encode('utf-8'))
+        self.assertRunExit(['tempest', 'run', '--blacklist-file=%s' % path], 0)
+
+    def test_tempest_run_with_blacklist_passing(self):
+        fd, path = tempfile.mkstemp()
+        self.addCleanup(os.remove, path)
+        blacklist_file = os.fdopen(fd, 'wb', 0)
+        self.addCleanup(blacklist_file.close)
+        blacklist_file.write('passing'.encode('utf-8'))
+        self.assertRunExit(['tempest', 'run', '--blacklist-file=%s' % path], 1)
+
+    def test_tempest_run_with_blacklist_regex_exclude_fail_check_pass(self):
+        fd, path = tempfile.mkstemp()
+        self.addCleanup(os.remove, path)
+        blacklist_file = os.fdopen(fd, 'wb', 0)
+        self.addCleanup(blacklist_file.close)
+        blacklist_file.write('failing'.encode('utf-8'))
+        self.assertRunExit(['tempest', 'run', '--blacklist-file=%s' % path,
+                            '--regex', 'pass'], 0)
+
+    def test_tempest_run_with_blacklist_regex_exclude_pass_check_pass(self):
+        fd, path = tempfile.mkstemp()
+        self.addCleanup(os.remove, path)
+        blacklist_file = os.fdopen(fd, 'wb', 0)
+        self.addCleanup(blacklist_file.close)
+        blacklist_file.write('passing'.encode('utf-8'))
+        self.assertRunExit(['tempest', 'run', '--blacklist-file=%s' % path,
+                            '--regex', 'pass'], 1)
+
+    def test_tempest_run_with_blacklist_regex_exclude_pass_check_fail(self):
+        fd, path = tempfile.mkstemp()
+        self.addCleanup(os.remove, path)
+        blacklist_file = os.fdopen(fd, 'wb', 0)
+        self.addCleanup(blacklist_file.close)
+        blacklist_file.write('passing'.encode('utf-8'))
+        self.assertRunExit(['tempest', 'run', '--blacklist-file=%s' % path,
+                            '--regex', 'fail'], 1)
+
+
+class TestConfigPathCheck(base.TestCase):
+    def setUp(self):
+        super(TestConfigPathCheck, self).setUp()
+        self.run_cmd = run.TempestRun(None, None)
+
+    def test_tempest_run_set_config_path(self):
+        # Note: (mbindlish) This test is created for the bug id: 1783751
+        # Checking TEMPEST_CONFIG_DIR and TEMPEST_CONFIG is actually
+        # getting set in os environment when some data has passed to
+        # set the environment.
+
+        _, path = tempfile.mkstemp()
+        self.addCleanup(os.remove, path)
+
+        self.run_cmd._set_env(path)
+        self.assertEqual(path, CONF._path)
+        self.assertIn('TEMPEST_CONFIG_DIR', os.environ)
+        self.assertEqual(path, os.path.join(os.environ['TEMPEST_CONFIG_DIR'],
+                                            os.environ['TEMPEST_CONFIG']))
+
+    def test_tempest_run_set_config_no_exist_path(self):
+        path = "fake/path"
+        self.assertRaisesRegex(FileNotFoundError,
+                               'Config file: .* doesn\'t exist',
+                               self.run_cmd._set_env, path)
+
+    def test_tempest_run_no_config_path(self):
+        # Note: (mbindlish) This test is created for the bug id: 1783751
+        # Checking TEMPEST_CONFIG_DIR and TEMPEST_CONFIG should have no value
+        # in os environment when no data has passed to set the environment.
+
+        self.run_cmd._set_env("")
+        self.assertFalse(CONF._path)
+        self.assertNotIn('TEMPEST_CONFIG_DIR', os.environ)
+        self.assertNotIn('TEMPEST_CONFIG', os.environ)
+
 
 class TestTakeAction(base.TestCase):
+    def setUp(self):
+        super(TestTakeAction, self).setUp()
+        self.name = data_utils.rand_name('workspace')
+        self.path = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.path, ignore_errors=True)
+        store_dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, store_dir, ignore_errors=True)
+        self.store_file = os.path.join(store_dir, 'workspace.yaml')
+        self.workspace_manager = workspace.WorkspaceManager(
+            path=self.store_file)
+        self.workspace_manager.register_new_workspace(self.name, self.path)
+
+    def _setup_test_dirs(self):
+        self.directory = tempfile.mkdtemp(prefix='tempest-unit')
+        self.addCleanup(shutil.rmtree, self.directory, ignore_errors=True)
+        self.test_dir = os.path.join(self.directory, 'tests')
+        os.mkdir(self.test_dir)
+        # Change directory, run wrapper and check result
+        self.addCleanup(os.chdir, os.path.abspath(os.curdir))
+        os.chdir(self.directory)
+
     def test_workspace_not_registered(self):
         class Exception_(Exception):
             pass
@@ -169,25 +324,116 @@ class TestTakeAction(base.TestCase):
         self.assertIn(workspace, exit_msg)
 
     def test_config_file_specified(self):
-        # Setup test dirs
-        self.directory = tempfile.mkdtemp(prefix='tempest-unit')
-        self.addCleanup(shutil.rmtree, self.directory)
-        self.test_dir = os.path.join(self.directory, 'tests')
-        os.mkdir(self.test_dir)
-        # Change directory, run wrapper and check result
-        self.addCleanup(os.chdir, os.path.abspath(os.curdir))
-        os.chdir(self.directory)
-
+        self._setup_test_dirs()
+        _, path = tempfile.mkstemp()
+        self.addCleanup(os.remove, path)
         tempest_run = run.TempestRun(app=mock.Mock(), app_args=mock.Mock())
         parsed_args = mock.Mock()
-        parsed_args.config_file = []
 
         parsed_args.workspace = None
         parsed_args.state = None
         parsed_args.list_tests = False
-        parsed_args.config_file = '.stestr.conf'
+        parsed_args.config_file = path
 
         with mock.patch('stestr.commands.run_command') as m:
             m.return_value = 0
             self.assertEqual(0, tempest_run.take_action(parsed_args))
             m.assert_called()
+
+    def test_no_config_file_no_workspace_no_state(self):
+        self._setup_test_dirs()
+        tempest_run = run.TempestRun(app=mock.Mock(), app_args=mock.Mock())
+        parsed_args = mock.Mock()
+
+        parsed_args.workspace = None
+        parsed_args.state = None
+        parsed_args.list_tests = False
+        parsed_args.config_file = ''
+
+        with mock.patch('stestr.commands.run_command'):
+            self.assertRaises(SystemExit, tempest_run.take_action, parsed_args)
+
+    def test_config_file_workspace_registered(self):
+        self._setup_test_dirs()
+        _, path = tempfile.mkstemp()
+        self.addCleanup(os.remove, path)
+        tempest_run = run.TempestRun(app=mock.Mock(), app_args=mock.Mock())
+        parsed_args = mock.Mock()
+        parsed_args.workspace = self.name
+        parsed_args.workspace_path = self.store_file
+        parsed_args.state = None
+        parsed_args.list_tests = False
+        parsed_args.config_file = path
+
+        with mock.patch('stestr.commands.run_command') as m:
+            m.return_value = 0
+            self.assertEqual(0, tempest_run.take_action(parsed_args))
+            m.assert_called()
+
+    @mock.patch('tempest.cmd.run.TempestRun._init_state')
+    def test_workspace_registered_no_config_no_state(self, mock_init_state):
+        self._setup_test_dirs()
+        tempest_run = run.TempestRun(app=mock.Mock(), app_args=mock.Mock())
+        parsed_args = mock.Mock()
+        parsed_args.workspace = self.name
+        parsed_args.workspace_path = self.store_file
+        parsed_args.state = None
+        parsed_args.list_tests = False
+        parsed_args.config_file = ''
+
+        with mock.patch('stestr.commands.run_command') as m:
+            m.return_value = 0
+            self.assertEqual(0, tempest_run.take_action(parsed_args))
+            m.assert_called()
+        mock_init_state.assert_not_called()
+
+    @mock.patch('tempest.cmd.run.TempestRun._init_state')
+    def test_no_config_file_no_workspace_state_true(self, mock_init_state):
+        self._setup_test_dirs()
+        tempest_run = run.TempestRun(app=mock.Mock(), app_args=mock.Mock())
+        parsed_args = mock.Mock()
+
+        parsed_args.workspace = None
+        parsed_args.state = True
+        parsed_args.list_tests = False
+        parsed_args.config_file = ''
+
+        with mock.patch('stestr.commands.run_command'):
+            self.assertRaises(SystemExit, tempest_run.take_action, parsed_args)
+        mock_init_state.assert_not_called()
+
+    @mock.patch('tempest.cmd.run.TempestRun._init_state')
+    def test_workspace_registered_no_config_state_true(self, mock_init_state):
+        self._setup_test_dirs()
+        tempest_run = run.TempestRun(app=mock.Mock(), app_args=mock.Mock())
+        parsed_args = mock.Mock()
+        parsed_args.workspace = self.name
+        parsed_args.workspace_path = self.store_file
+        parsed_args.state = True
+        parsed_args.list_tests = False
+        parsed_args.config_file = ''
+
+        with mock.patch('stestr.commands.run_command') as m:
+            m.return_value = 0
+            self.assertEqual(0, tempest_run.take_action(parsed_args))
+            m.assert_called()
+        mock_init_state.assert_called()
+
+    @mock.patch('tempest.cmd.run.TempestRun._init_state')
+    def test_no_workspace_config_file_state_true(self, mock_init_state):
+        self._setup_test_dirs()
+        _, path = tempfile.mkstemp()
+        self.addCleanup(os.remove, path)
+        tempest_run = run.TempestRun(app=mock.Mock(), app_args=mock.Mock())
+        parsed_args = mock.Mock()
+        parsed_args.workspace = None
+        parsed_args.workspace_path = self.store_file
+        parsed_args.state = True
+        parsed_args.list_tests = False
+        parsed_args.config_file = path
+
+        with mock.patch('stestr.commands.run_command') as m:
+            m.return_value = 0
+            self.assertEqual(0, tempest_run.take_action(parsed_args))
+            m.assert_called()
+        mock_init_state.assert_called()

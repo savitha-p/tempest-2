@@ -16,6 +16,7 @@
 from oslo_serialization import jsonutils as json
 from six.moves.urllib import parse as urllib
 
+from tempest.lib.api_schema.response.volume import services as schema
 from tempest.lib.common import rest_client
 
 
@@ -27,7 +28,7 @@ class ServicesClient(rest_client.RestClient):
 
         For a full list of available parameters, please refer to the official
         API reference:
-        https://developer.openstack.org/api-ref/block-storage/v3/#list-all-cinder-services
+        https://docs.openstack.org/api-ref/block-storage/v3/#list-all-cinder-services
         """
         url = 'os-services'
         if params:
@@ -35,7 +36,7 @@ class ServicesClient(rest_client.RestClient):
 
         resp, body = self.get(url)
         body = json.loads(body)
-        self.expected_success(200, resp.status)
+        self.validate_response(schema.list_services, resp, body)
         return rest_client.ResponseBody(resp, body)
 
     def enable_service(self, **kwargs):
@@ -43,12 +44,12 @@ class ServicesClient(rest_client.RestClient):
 
         For a full list of available parameters, please refer to the official
         API reference:
-        https://developer.openstack.org/api-ref/block-storage/v3/#enable-a-cinder-service
+        https://docs.openstack.org/api-ref/block-storage/v3/#enable-a-cinder-service
         """
         put_body = json.dumps(kwargs)
         resp, body = self.put('os-services/enable', put_body)
         body = json.loads(body)
-        self.expected_success(200, resp.status)
+        self.validate_response(schema.enable_service, resp, body)
         return rest_client.ResponseBody(resp, body)
 
     def disable_service(self, **kwargs):
@@ -56,12 +57,12 @@ class ServicesClient(rest_client.RestClient):
 
         For a full list of available parameters, please refer to the official
         API reference:
-        https://developer.openstack.org/api-ref/block-storage/v3/#disable-a-cinder-service
+        https://docs.openstack.org/api-ref/block-storage/v3/#disable-a-cinder-service
         """
         put_body = json.dumps(kwargs)
         resp, body = self.put('os-services/disable', put_body)
         body = json.loads(body)
-        self.expected_success(200, resp.status)
+        self.validate_response(schema.disable_service, resp, body)
         return rest_client.ResponseBody(resp, body)
 
     def disable_log_reason(self, **kwargs):
@@ -69,12 +70,12 @@ class ServicesClient(rest_client.RestClient):
 
         For a full list of available parameters, please refer to the official
         API reference:
-        https://developer.openstack.org/api-ref/block-storage/v3/#log-disabled-cinder-service-information
+        https://docs.openstack.org/api-ref/block-storage/v3/#log-disabled-cinder-service-information
         """
         put_body = json.dumps(kwargs)
         resp, body = self.put('os-services/disable-log-reason', put_body)
         body = json.loads(body)
-        self.expected_success(200, resp.status)
+        self.validate_response(schema.disable_log_reason, resp, body)
         return rest_client.ResponseBody(resp, body)
 
     def freeze_host(self, **kwargs):
@@ -82,11 +83,11 @@ class ServicesClient(rest_client.RestClient):
 
         For a full list of available parameters, please refer to the official
         API reference:
-        https://developer.openstack.org/api-ref/block-storage/v3/#freeze-a-cinder-backend-host
+        https://docs.openstack.org/api-ref/block-storage/v3/#freeze-a-cinder-backend-host
         """
         put_body = json.dumps(kwargs)
-        resp, _ = self.put('os-services/freeze', put_body)
-        self.expected_success(200, resp.status)
+        resp, body = self.put('os-services/freeze', put_body)
+        self.validate_response(schema.freeze_host, resp, body)
         return rest_client.ResponseBody(resp)
 
     def thaw_host(self, **kwargs):
@@ -94,9 +95,9 @@ class ServicesClient(rest_client.RestClient):
 
         For a full list of available parameters, please refer to the official
         API reference:
-        https://developer.openstack.org/api-ref/block-storage/v3/#thaw-a-cinder-backend-host
+        https://docs.openstack.org/api-ref/block-storage/v3/#thaw-a-cinder-backend-host
         """
         put_body = json.dumps(kwargs)
-        resp, _ = self.put('os-services/thaw', put_body)
-        self.expected_success(200, resp.status)
+        resp, body = self.put('os-services/thaw', put_body)
+        self.validate_response(schema.thaw_host, resp, body)
         return rest_client.ResponseBody(resp)

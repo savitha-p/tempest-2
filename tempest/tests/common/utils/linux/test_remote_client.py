@@ -88,7 +88,7 @@ class TestRemoteClient(base.TestCase):
     # the information using gnu/linux tools.
 
     def _assert_exec_called_with(self, cmd):
-        cmd = "set -eu -o pipefail; PATH=$PATH:/sbin; " + cmd
+        cmd = "set -eu -o pipefail; PATH=$PATH:/sbin:/usr/sbin; " + cmd
         self.ssh_mock.mock.exec_command.assert_called_with(cmd)
 
     def test_get_disks(self):
@@ -105,6 +105,15 @@ sdb          8:16      0 1000204886016  0 disk"""
         self.ssh_mock.mock.exec_command.return_value = output_lsblk
         self.assertEqual(self.conn.get_disks(), result)
         self._assert_exec_called_with('lsblk -lb --nodeps')
+
+    def test_count_disk(self):
+        output_lsblk = """\
+NAME       MAJ:MIN    RM          SIZE RO TYPE MOUNTPOINT
+sda          8:0       0  128035676160  0 disk
+sdb          8:16      0 1000204886016  0 disk
+sr0         11:0       1    1073741312  0 rom"""
+        self.ssh_mock.mock.exec_command.return_value = output_lsblk
+        self.assertEqual(self.conn.count_disks(), 2)
 
     def test_get_boot_time(self):
         booted_at = 10000

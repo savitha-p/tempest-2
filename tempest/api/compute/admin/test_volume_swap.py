@@ -70,6 +70,7 @@ class TestVolumeSwap(TestVolumeSwapBase):
     """The test suite for swapping of volume with admin user.
 
     The following is the scenario outline:
+
     1. Create a volume "volume1" with non-admin.
     2. Create a volume "volume2" with non-admin.
     3. Boot an instance "instance1" with non-admin.
@@ -82,6 +83,11 @@ class TestVolumeSwap(TestVolumeSwapBase):
        is attached to "instance1" and "volume2" is in available state.
     """
 
+    # NOTE(mriedem): This is an uncommon scenario to call the compute API
+    # to swap volumes directly; swap volume is primarily only for volume
+    # live migration and retype callbacks from the volume service, and is slow
+    # so it's marked as such.
+    @decorators.attr(type='slow')
     @decorators.idempotent_id('1769f00d-a693-4d67-a631-6a3496773813')
     @utils.services('volume')
     def test_volume_swap(self):
@@ -136,7 +142,25 @@ class TestMultiAttachVolumeSwap(TestVolumeSwapBase):
         if not CONF.compute_feature_enabled.volume_multiattach:
             raise cls.skipException('Volume multi-attach is not available.')
 
+    @classmethod
+    def setup_clients(cls):
+        super(TestMultiAttachVolumeSwap, cls).setup_clients()
+        # Need this to set readonly volumes.
+        cls.admin_volumes_client = cls.os_admin.volumes_client_latest
+
+    # NOTE(mriedem): This is an uncommon scenario to call the compute API
+    # to swap volumes directly; swap volume is primarily only for volume
+    # live migration and retype callbacks from the volume service, and is slow
+    # so it's marked as such.
+    @decorators.attr(type='slow')
     @decorators.idempotent_id('e8f8f9d1-d7b7-4cd2-8213-ab85ef697b6e')
+    # For some reason this test intermittently fails on teardown when there are
+    # multiple compute nodes and the servers are split across the computes.
+    # For now, just skip this test if there are multiple computes.
+    # Alternatively we could put the servers in an affinity group if there are
+    # multiple computes but that would just side-step the underlying bug.
+    @decorators.skip_because(bug='1807723',
+                             condition=CONF.compute.min_compute_nodes > 1)
     @utils.services('volume')
     def test_volume_swap_with_multiattach(self):
         # Create two volumes.
@@ -144,15 +168,28 @@ class TestMultiAttachVolumeSwap(TestVolumeSwapBase):
         # volumes cleanup can happen successfully irrespective of which volume
         # is attached to server.
         volume1 = self.create_volume(multiattach=True)
+        # Make volume1 read-only since you can't swap from a volume with
+        # multiple read/write attachments, and you can't change the readonly
+        # flag on an in-use volume so we have to do this before attaching
+        # volume1 to anything. If the compute API ever supports per-attachment
+        # attach modes, then we can handle this differently.
+        self.admin_volumes_client.update_volume_readonly(
+            volume1['id'], readonly=True)
         volume2 = self.create_volume(multiattach=True)
 
-        # Boot server1
-        server1 = self.create_test_server(wait_until='ACTIVE')
+        # Create two servers and wait for them to be ACTIVE.
+        reservation_id = self.create_test_server(
+            wait_until='ACTIVE', min_count=2,
+            return_reservation_id=True)['reservation_id']
+        # Get the servers using the reservation_id.
+        servers = self.servers_client.list_servers(
+            reservation_id=reservation_id)['servers']
+        self.assertEqual(2, len(servers))
         # Attach volume1 to server1
+        server1 = servers[0]
         self.attach_volume(server1, volume1)
-        # Boot server2
-        server2 = self.create_test_server(wait_until='ACTIVE')
         # Attach volume1 to server2
+        server2 = servers[1]
         self.attach_volume(server2, volume1)
 
         # Swap volume1 to volume2 on server1, volume1 should remain attached

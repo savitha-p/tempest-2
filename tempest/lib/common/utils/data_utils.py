@@ -50,8 +50,7 @@ def rand_name(name='', prefix='tempest'):
              (e.g. 'prefixfoo-namebar-154876201')
     :rtype: string
     """
-    randbits = str(random.randint(1, 0x7fffffff))
-    rand_name = randbits
+    rand_name = str(random.randint(1, 0x7fffffff))
     if name:
         rand_name = name + '-' + rand_name
     if prefix:
@@ -65,9 +64,9 @@ def rand_password(length=15):
     :param int length: The length of password that you expect to set
                        (If it's smaller than 3, it's same as 3.)
     :return: a random password. The format is
-             '<random upper letter>-<random number>-<random special character>
-              -<random ascii letters or digit characters or special symbols>'
-             (e.g. 'G2*ac8&lKFFgh%2')
+        ``'<random upper letter>-<random number>-<random special character>
+        -<random ascii letters or digit characters or special symbols>'``
+        (e.g. ``G2*ac8&lKFFgh%2``)
     :rtype: string
     """
     upper = random.choice(string.ascii_uppercase)
@@ -171,7 +170,7 @@ def random_bytes(size=1024):
     :rtype: string
     """
     return b''.join([six.int2byte(random.randint(0, 255))
-                    for i in range(size)])
+                     for i in range(size)])
 
 
 # Courtesy of http://stackoverflow.com/a/312464

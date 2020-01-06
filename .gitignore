@@ -1,11 +1,16 @@
+# Don't add patterns to exclude files created by preferred personal tools
+# (editors, IDEs, your operating system itself even). These should instead be
+# maintained outside the repository, for example in a ~/.gitignore file added
+# with:
+#
+# git config --global core.excludesfile '~/.gitignore'
 AUTHORS
 ChangeLog
 *.pyc
 __pycache__/
 etc/accounts.yaml
-etc/tempest.conf
+etc/*.conf
 etc/tempest.conf.sample
-etc/logging.conf
 include/swift_objects/swift_small
 include/swift_objects/swift_medium
 include/swift_objects/swift_large

@@ -16,6 +16,7 @@
 import struct
 
 import six
+import six.moves.urllib.parse as urlparse
 import urllib3
 
 from tempest.api.compute import base
@@ -73,8 +74,9 @@ class NoVNCConsoleTestJSON(base.BaseV2ComputeTest):
                          'initial call: ' + six.text_type(resp.status))
         # Do some basic validation to make sure it is an expected HTML document
         resp_data = resp.data.decode()
-        self.assertIn('<html>', resp_data,
-                      'Not a valid html document in the response.')
+        # This is needed in the case of example: <html lang="en">
+        self.assertRegex(resp_data, '<html.*>',
+                         'Not a valid html document in the response.')
         self.assertIn('</html>', resp_data,
                       'Not a valid html document in the response.')
         # Just try to make sure we got JavaScript back for noVNC, since we
@@ -143,7 +145,7 @@ class NoVNCConsoleTestJSON(base.BaseV2ComputeTest):
         data_length = len(data) if data is not None else 0
         self.assertFalse(data_length <= 24 or
                          data_length != (struct.unpack(">L",
-                                         data[20:24])[0] + 24),
+                                                       data[20:24])[0] + 24),
                          'Server initialization was not the right format.')
         # Since the rest of the data on the screen is arbitrary, we will
         # close the socket and end our validation of the data at this point
@@ -151,25 +153,27 @@ class NoVNCConsoleTestJSON(base.BaseV2ComputeTest):
         # initialization was the right format
         self.assertFalse(data_length <= 24 or
                          data_length != (struct.unpack(">L",
-                                         data[20:24])[0] + 24))
+                                                       data[20:24])[0] + 24))
 
     def _validate_websocket_upgrade(self):
+        """Verify that the websocket upgrade was successful.
+
+        Parses response and ensures that required response
+        fields are present and accurate.
+        (https://tools.ietf.org/html/rfc7231#section-6.2.2)
+        """
+
         self.assertTrue(
             self._websocket.response.startswith(b'HTTP/1.1 101 Switching '
-                                                b'Protocols\r\n'),
-            'Did not get the expected 101 on the {} call: {}'.format(
-                CONF.compute_feature_enabled.vnc_server_header,
+                                                b'Protocols'),
+            'Incorrect HTTP return status code: {}'.format(
                 six.text_type(self._websocket.response)
             )
         )
-        # Since every other server type returns Headers with different case
-        # (for example 'nginx'), lowercase must be applied to eliminate issues.
-        _desired_header = "server: {0}".format(
-            CONF.compute_feature_enabled.vnc_server_header
-        ).lower()
+        _required_header = 'upgrade: websocket'
         _response = six.text_type(self._websocket.response).lower()
         self.assertIn(
-            _desired_header,
+            _required_header,
             _response,
             'Did not get the expected WebSocket HTTP Response.'
         )
@@ -204,7 +208,18 @@ class NoVNCConsoleTestJSON(base.BaseV2ComputeTest):
                                                type='novnc')['console']
         self.assertEqual('novnc', body['type'])
         # Do the WebSockify HTTP Request to novncproxy with a bad token
-        url = body['url'].replace('token=', 'token=bad')
+        parts = urlparse.urlparse(body['url'])
+        qparams = urlparse.parse_qs(parts.query)
+        if 'path' in qparams:
+            qparams['path'] = urlparse.unquote(qparams['path'][0]).replace(
+                'token=', 'token=bad')
+        elif 'token' in qparams:
+            qparams['token'] = 'bad' + qparams['token'][0]
+        new_query = urlparse.urlencode(qparams)
+        new_parts = urlparse.ParseResult(parts.scheme, parts.netloc,
+                                         parts.path, parts.params, new_query,
+                                         parts.fragment)
+        url = urlparse.urlunparse(new_parts)
         self._websocket = compute.create_websocket(url)
         # Make sure the novncproxy rejected the connection and closed it
         data = self._websocket.receive_frame()

@@ -205,10 +205,6 @@ def verify_keystone_api_versions(os, update):
 def verify_cinder_api_versions(os, update):
     # Check cinder api versions
     versions = _get_api_versions(os, 'cinder')
-    if (CONF.volume_feature_enabled.api_v1 !=
-            contains_version('v1.', versions)):
-        print_and_or_update('api_v1', 'volume-feature-enabled',
-                            not CONF.volume_feature_enabled.api_v1, update)
     if (CONF.volume_feature_enabled.api_v2 !=
             contains_version('v2.', versions)):
         print_and_or_update('api_v2', 'volume-feature-enabled',
@@ -283,6 +279,9 @@ def verify_extensions(os, service, results):
     if not results.get(service):
         results[service] = {}
     extensions_opt = get_enabled_extensions(service)
+    if not extensions_opt:
+        LOG.info("'%s' has no api_extensions set.", service)
+        return results
     if extensions_opt[0] == 'all':
         results[service]['extensions'] = extensions
         return results
@@ -366,11 +365,11 @@ def check_service_availability(os, update):
         catalog_type = getattr(cfg, 'catalog_type', None)
         if not catalog_type:
             continue
-        else:
-            if cfgname == 'identity':
-                # Keystone is a required service for tempest
-                continue
-            if catalog_type not in services:
+        if cfgname == 'identity':
+            # Keystone is a required service for tempest
+            continue
+        if catalog_type not in services:
+            try:
                 if getattr(CONF.service_available, codename_match[cfgname]):
                     print('Endpoint type %s not found either disable service '
                           '%s or fix the catalog_type in the config file' % (
@@ -378,7 +377,13 @@ def check_service_availability(os, update):
                     if update:
                         change_option(codename_match[cfgname],
                                       'service_available', False)
-            else:
+            except KeyError:
+                print('%s is a third party plugin, cannot be verified '
+                      'automatically, but it is suggested that it is set to '
+                      'False because %s service is not available ' % (
+                          cfgname, catalog_type))
+        else:
+            try:
                 if not getattr(CONF.service_available,
                                codename_match[cfgname]):
                     print('Endpoint type %s is available, service %s should be'
@@ -392,6 +397,11 @@ def check_service_availability(os, update):
                         avail_services.append(codename_match[cfgname])
                 else:
                     avail_services.append(codename_match[cfgname])
+            except KeyError:
+                print('%s is a third party plugin, cannot be verified '
+                      'automatically, but it is suggested that it is set to '
+                      'True because %s service is available ' % (
+                          cfgname, catalog_type))
     return avail_services
 
 

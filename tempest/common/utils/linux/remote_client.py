@@ -73,6 +73,13 @@ class RemoteClient(remote_client.RemoteClient):
             msg = "'TYPE' column is required but the output doesn't have it: "
             raise tempest.lib.exceptions.TempestException(msg + output)
 
+    def count_disks(self):
+        disks_list = self.get_disks()
+        disks_list = [line[0] for line in
+                      [device_name.split()
+                       for device_name in disks_list.splitlines()][1:]]
+        return len(disks_list)
+
     def get_boot_time(self):
         cmd = 'cut -f1 -d. /proc/uptime'
         boot_secs = self.exec_command(cmd)
@@ -98,6 +105,7 @@ class RemoteClient(remote_client.RemoteClient):
     def get_nic_name_by_ip(self, address):
         cmd = "ip -o addr | awk '/%s/ {print $2}'" % address
         nic = self.exec_command(cmd)
+        LOG.debug('(get_nic_name_by_ip) Command result: %s', nic)
         return nic.strip().strip(":").split('@')[0].lower()
 
     def get_dns_servers(self):
@@ -147,7 +155,7 @@ class RemoteClient(remote_client.RemoteClient):
         self.exec_command('sudo umount %s' % mount_path)
 
     def make_fs(self, dev_name, fs='ext4'):
-        cmd_mkfs = 'sudo /usr/sbin/mke2fs -t %s /dev/%s' % (fs, dev_name)
+        cmd_mkfs = 'sudo mke2fs -t %s /dev/%s' % (fs, dev_name)
         try:
             self.exec_command(cmd_mkfs)
         except tempest.lib.exceptions.SSHExecCommandFailed:
@@ -155,3 +163,53 @@ class RemoteClient(remote_client.RemoteClient):
             cmd_why = 'sudo ls -lR /dev'
             LOG.info("Contents of /dev: %s", self.exec_command(cmd_why))
             raise
+
+    def nc_listen_host(self, port=80, protocol='tcp'):
+        """Creates persistent nc server listening on the given TCP / UDP port
+
+        :port: the port to start listening on.
+        :protocol: the protocol used by the server. TCP by default.
+        """
+        udp = '-u' if protocol.lower() == 'udp' else ''
+        cmd = "sudo nc %(udp)s -p %(port)s -lk -e echo foolish &" % {
+            'udp': udp, 'port': port}
+        return self.exec_command(cmd)
+
+    def nc_host(self, host, port=80, protocol='tcp', expected_response=None):
+        """Check connectivity to TCP / UDP port at host via nc
+
+        :host: an IP against which the connectivity will be tested.
+        :port: the port to check connectivity against.
+        :protocol: the protocol used by nc to send packets. TCP by default.
+        :expected_response: string representing the expected response
+            from server.
+        :raises SSHExecCommandFailed: if an expected response is given and it
+            does not match the actual server response.
+        """
+        udp = '-u' if protocol.lower() == 'udp' else ''
+        cmd = 'echo "bar" | nc -w 1 %(udp)s %(host)s %(port)s' % {
+            'udp': udp, 'host': host, 'port': port}
+        response = self.exec_command(cmd)
+
+        # sending an UDP packet will always succeed. we need to check
+        # the response.
+        if (expected_response is not None and
+                expected_response != response.strip()):
+            raise tempest.lib.exceptions.SSHExecCommandFailed(
+                command=cmd, exit_status=0, stdout=response, stderr='')
+        return response
+
+    def icmp_check(self, host, nic=None):
+        """Wrapper for icmp connectivity checks"""
+        return self.ping_host(host, nic=nic)
+
+    def udp_check(self, host, **kwargs):
+        """Wrapper for udp connectivity checks."""
+        kwargs.pop('nic', None)
+        return self.nc_host(host, protocol='udp', expected_response='foolish',
+                            **kwargs)
+
+    def tcp_check(self, host, **kwargs):
+        """Wrapper for tcp connectivity checks."""
+        kwargs.pop('nic', None)
+        return self.nc_host(host, **kwargs)

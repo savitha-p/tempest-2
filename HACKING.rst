@@ -6,7 +6,7 @@ Tempest Coding Guide
 - Step 2: Read on
 
 Tempest Specific Commandments
-------------------------------
+-----------------------------
 
 - [T102] Cannot import OpenStack python clients in tempest/api &
   tempest/scenario tests
@@ -28,6 +28,8 @@ Tempest Specific Commandments
 - [T117] Check negative tests have ``@decorators.attr(type=['negative'])``
   applied.
 
+It is recommended to use ``tox -eautopep8`` before submitting a patch.
+
 Test Data/Configuration
 -----------------------
 - Assume nothing about existing test data
@@ -35,6 +37,30 @@ Test Data/Configuration
 - Clean up test data at the completion of each test
 - Use configuration files for values that will vary by environment
 
+Supported OpenStack Components
+------------------------------
+
+Tempest's :ref:`library` and :ref:`plugin interface <tempest_plugin>` can be
+leveraged to support integration testing for virtually any OpenStack component.
+
+However, Tempest only offers **in-tree** integration testing coverage for the
+following components:
+
+* Cinder
+* Glance
+* Keystone
+* Neutron
+* Nova
+* Swift
+
+Historically, Tempest offered in-tree testing for other components as well, but
+since the introduction of the `External Plugin Interface`_, Tempest's in-tree
+testing scope has been limited to the projects above. Integration tests for
+projects not included above should go into one of the
+`relevant plugin projects`_.
+
+.. _External Plugin Interface: https://specs.openstack.org/openstack/qa-specs/specs/tempest/implemented/tempest-external-plugin-interface.html
+.. _relevant plugin projects: https://docs.openstack.org/tempest/latest/plugin-registry.html#detected-plugins
 
 Exception Handling
 ------------------
@@ -349,18 +375,19 @@ is required. If there is more than one test case in the class individual
 docstrings for the workflow in each test methods can be used instead. A good
 example of this would be::
 
-    class TestVolumeBootPattern(manager.ScenarioTest):
-        """
-        This test case attempts to reproduce the following steps:
+    class TestServerBasicOps(manager.ScenarioTest):
 
-         * Create in Cinder some bootable volume importing a Glance image
-         * Boot an instance from the bootable volume
-         * Write content to the volume
-         * Delete an instance and Boot a new instance from the volume
-         * Check written content in the instance
-         * Create a volume snapshot while the instance is running
-         * Boot an additional instance from the new snapshot based volume
-         * Check written content in the instance booted from snapshot
+        """The test suite for server basic operations
+
+        This smoke test case follows this basic set of operations:
+         * Create a keypair for use in launching an instance
+         * Create a security group to control network access in instance
+         * Add simple permissive rules to the security group
+         * Launch an instance
+         * Perform ssh to instance
+         * Verify metadata service
+         * Verify metadata on config_drive
+         * Terminate the instance
         """
 
 Test Identification with Idempotent ID
@@ -430,7 +457,7 @@ in which the feature isn't available. In DevStack, this can be accomplished
 by modifying Tempest's `lib installation script`_ for previous branches
 (because DevStack is branched).
 
-.. _lib installation script: http://git.openstack.org/cgit/openstack-dev/devstack/tree/lib/tempest
+.. _lib installation script: https://opendev.org/openstack/devstack/src/branch/master/lib/tempest
 
 2. Bug fix on core project needing Tempest changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

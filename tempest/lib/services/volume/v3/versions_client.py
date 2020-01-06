@@ -12,7 +12,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import time
+from six.moves.urllib.parse import urljoin
 
 from oslo_serialization import jsonutils as json
 
@@ -28,20 +28,35 @@ class VersionsClient(base_client.BaseClient):
 
         For a full list of available parameters, please refer to the official
         API reference:
-        https://developer.openstack.org/api-ref/block-storage/v3/#list-all-api-versions
+        https://docs.openstack.org/api-ref/block-storage/v3/#list-all-api-versions
         """
         version_url = self._get_base_version_url()
 
-        start = time.time()
         resp, body = self.raw_request(version_url, 'GET')
-        end = time.time()
         # NOTE: We need a raw_request() here instead of request() call because
         # "list API versions" API doesn't require an authentication and we can
         # skip it with raw_request() call.
-        self._log_request('GET', version_url, resp, secs=(end - start),
-                          resp_body=body)
         self._error_checker(resp, body)
 
         body = json.loads(body)
         self.validate_response(schema.list_versions, resp, body)
+        return rest_client.ResponseBody(resp, body)
+
+    def show_version(self, version):
+        """Show API version details
+
+        Use raw_request in order to have access to the endpoints minus
+        version and project in order to add version only back.
+
+        For a full list of available parameters, please refer to the official
+        API reference:
+        https://docs.openstack.org/api-ref/block-storage/v3/#show-api-v3-details
+        """
+
+        version_url = urljoin(self._get_base_version_url(), version + '/')
+        resp, body = self.raw_request(version_url, 'GET',
+                                      {'X-Auth-Token': self.token})
+        self._error_checker(resp, body)
+        body = json.loads(body)
+        self.validate_response(schema.volume_api_version_details, resp, body)
         return rest_client.ResponseBody(resp, body)

@@ -12,11 +12,6 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
-from oslo_log import log as logging
-
-from tempest.lib.common.utils import test_utils
-
-LOG = logging.getLogger(__name__)
 
 
 def singleton(cls):
@@ -28,10 +23,3 @@ def singleton(cls):
             instances[cls] = cls()
         return instances[cls]
     return getinstance
-
-
-def find_test_caller(*args, **kwargs):
-    LOG.warning("tempest.lib.common.utils.misc.find_test_caller is deprecated "
-                "in favor of tempest.lib.common.utils.test_utils."
-                "find_test_caller")
-    test_utils.find_test_caller(*args, **kwargs)

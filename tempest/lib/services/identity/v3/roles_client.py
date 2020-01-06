@@ -26,7 +26,7 @@ class RolesClient(rest_client.RestClient):
 
         For a full list of available parameters, please refer to the official
         API reference:
-        http://developer.openstack.org/api-ref/identity/v3/index.html#create-role
+        https://docs.openstack.org/api-ref/identity/v3/index.html#create-role
         """
         post_body = json.dumps({'role': kwargs})
         resp, body = self.post('roles', post_body)
@@ -42,8 +42,12 @@ class RolesClient(rest_client.RestClient):
         return rest_client.ResponseBody(resp, body)
 
     def list_roles(self, **params):
-        """Get the list of Roles."""
+        """Get the list of Roles.
 
+        For a full list of available parameters, please refer to the official
+        API reference:
+        https://docs.openstack.org/api-ref/identity/v3/index.html#list-roles
+        """
         url = 'roles'
         if params:
             url += '?%s' % urllib.urlencode(params)
@@ -57,7 +61,7 @@ class RolesClient(rest_client.RestClient):
 
         For a full list of available parameters, please refer to the official
         API reference:
-        http://developer.openstack.org/api-ref/identity/v3/index.html#update-role
+        https://docs.openstack.org/api-ref/identity/v3/index.html#update-role
         """
         post_body = json.dumps({'role': kwargs})
         resp, body = self.patch('roles/%s' % role_id, post_body)
@@ -219,7 +223,7 @@ class RolesClient(rest_client.RestClient):
 
         For a full list of available parameters, please refer to the official
         API reference:
-        http://developer.openstack.org/api-ref/identity/v3/index.html#list-all-role-inference-rules
+        https://docs.openstack.org/api-ref/identity/v3/index.html#list-all-role-inference-rules
         """
         resp, body = self.get('role_inferences')
         self.expected_success(200, resp.status)

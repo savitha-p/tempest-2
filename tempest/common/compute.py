@@ -44,15 +44,14 @@ LOG = logging.getLogger(__name__)
 def is_scheduler_filter_enabled(filter_name):
     """Check the list of enabled compute scheduler filters from config.
 
-    This function checks whether the given compute scheduler filter is
-    available and configured in the config file. If the
-    scheduler_available_filters option is set to 'all' (Default value. which
-    means default filters are configured in nova) in tempest.conf then, this
-    function returns True with assumption that requested filter 'filter_name'
-    is one of available filter in nova ("nova.scheduler.filters.all_filters").
+    This function checks whether the given compute scheduler filter is enabled
+    in the nova config file. If the scheduler_enabled_filters option is set to
+    'all' in tempest.conf then, this function returns True with assumption that
+    requested filter 'filter_name' is one of the enabled filters in nova
+    ("nova.scheduler.filters.all_filters").
     """
 
-    filters = CONF.compute_feature_enabled.scheduler_available_filters
+    filters = CONF.compute_feature_enabled.scheduler_enabled_filters
     if not filters:
         return False
     if 'all' in filters:
@@ -79,23 +78,22 @@ def create_test_server(clients, validatable=False, validation_resources=None,
     :param wait_until: Server status to wait for the server to reach after
         its creation.
     :param volume_backed: Whether the server is volume backed or not.
-                          If this is true, a volume will be created and
-                          create server will be requested with
-                          'block_device_mapping_v2' populated with below
-                          values:
-                          --------------------------------------------
-                          bd_map_v2 = [{
-                              'uuid': volume['volume']['id'],
-                              'source_type': 'volume',
-                              'destination_type': 'volume',
-                              'boot_index': 0,
-                              'delete_on_termination': True}]
-                          kwargs['block_device_mapping_v2'] = bd_map_v2
-                          ---------------------------------------------
-                          If server needs to be booted from volume with other
-                          combination of bdm inputs than mentioned above, then
-                          pass the bdm inputs explicitly as kwargs and image_id
-                          as empty string ('').
+        If this is true, a volume will be created and create server will be
+        requested with 'block_device_mapping_v2' populated with below values:
+
+        .. code-block:: python
+
+            bd_map_v2 = [{
+                'uuid': volume['volume']['id'],
+                'source_type': 'volume',
+                'destination_type': 'volume',
+                'boot_index': 0,
+                'delete_on_termination': True}]
+            kwargs['block_device_mapping_v2'] = bd_map_v2
+
+        If server needs to be booted from volume with other combination of bdm
+        inputs than mentioned above, then pass the bdm inputs explicitly as
+        kwargs and image_id as empty string ('').
     :param name: Name of the server to be provisioned. If not defined a random
         string ending with '-instance' will be generated.
     :param flavor: Flavor of the server to be provisioned. If not defined,
@@ -169,11 +167,23 @@ def create_test_server(clients, validatable=False, validation_resources=None,
         params = {'name': volume_name,
                   'imageRef': image_id,
                   'size': CONF.volume.volume_size}
+        if CONF.compute.compute_volume_common_az:
+            params.setdefault('availability_zone',
+                              CONF.compute.compute_volume_common_az)
         volume = volumes_client.create_volume(**params)
-        waiters.wait_for_volume_resource_status(volumes_client,
-                                                volume['volume']['id'],
-                                                'available')
-
+        try:
+            waiters.wait_for_volume_resource_status(volumes_client,
+                                                    volume['volume']['id'],
+                                                    'available')
+        except Exception:
+            with excutils.save_and_reraise_exception():
+                try:
+                    volumes_client.delete_volume(volume['volume']['id'])
+                    volumes_client.wait_for_resource_deletion(
+                        volume['volume']['id'])
+                except Exception as exc:
+                    LOG.exception("Deleting volume %s failed, exception %s",
+                                  volume['volume']['id'], exc)
         bd_map_v2 = [{
             'uuid': volume['volume']['id'],
             'source_type': 'volume',
@@ -186,6 +196,9 @@ def create_test_server(clients, validatable=False, validation_resources=None,
         # to be specified.
         image_id = ''
 
+    if CONF.compute.compute_volume_common_az:
+        kwargs.setdefault('availability_zone',
+                          CONF.compute.compute_volume_common_az)
     body = clients.servers_client.create_server(name=name, imageRef=image_id,
                                                 flavorRef=flavor,
                                                 **kwargs)
@@ -385,8 +398,11 @@ class _WebSocket(object):
 
     def _upgrade(self, url):
         """Upgrade the HTTP connection to a WebSocket and verify."""
-        # The real request goes to the /websockify URI always
-        reqdata = 'GET /websockify HTTP/1.1\r\n'
+        # It is possible to pass the path as a query parameter in the request,
+        # so use it if present
+        qparams = urlparse.parse_qs(url.query)
+        path = qparams['path'][0] if 'path' in qparams else '/websockify'
+        reqdata = 'GET %s HTTP/1.1\r\n' % path
         reqdata += 'Host: %s' % url.hostname
         # Add port only if we have one specified
         if url.port:
@@ -395,7 +411,7 @@ class _WebSocket(object):
         reqdata += '\r\n'
         # Tell the HTTP Server to Upgrade the connection to a WebSocket
         reqdata += 'Upgrade: websocket\r\nConnection: Upgrade\r\n'
-        # The token=xxx is sent as a Cookie not in the URI
+        # The token=xxx is sent as a Cookie not in the URI for noVNC < v1.1.0
         reqdata += 'Cookie: %s\r\n' % url.query
         # Use a hard-coded WebSocket key since a test program
         reqdata += 'Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==\r\n'

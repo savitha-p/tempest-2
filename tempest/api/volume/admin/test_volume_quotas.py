@@ -19,54 +19,48 @@ from tempest.lib import decorators
 
 QUOTA_KEYS = ['gigabytes', 'snapshots', 'volumes', 'backups',
               'backup_gigabytes', 'per_volume_gigabytes']
-QUOTA_USAGE_KEYS = ['reserved', 'limit', 'in_use']
 
 
-class BaseVolumeQuotasAdminTestJSON(base.BaseVolumeAdminTest):
+class VolumeQuotasAdminTestJSON(base.BaseVolumeAdminTest):
     credentials = ['primary', 'alt', 'admin']
 
     def setUp(self):
         # NOTE(jeremy.zhang): Avoid conflicts with volume quota class tests.
         self.useFixture(fixtures.LockFixture('volume_quotas'))
-        super(BaseVolumeQuotasAdminTestJSON, self).setUp()
+        super(VolumeQuotasAdminTestJSON, self).setUp()
 
     @classmethod
     def setup_credentials(cls):
-        super(BaseVolumeQuotasAdminTestJSON, cls).setup_credentials()
+        super(VolumeQuotasAdminTestJSON, cls).setup_credentials()
         cls.demo_tenant_id = cls.os_primary.credentials.tenant_id
 
     @classmethod
     def setup_clients(cls):
-        super(BaseVolumeQuotasAdminTestJSON, cls).setup_clients()
+        super(VolumeQuotasAdminTestJSON, cls).setup_clients()
         cls.transfer_client = cls.os_primary.volume_transfers_client_latest
         cls.alt_transfer_client = cls.os_alt.volume_transfers_client_latest
 
     @classmethod
     def resource_setup(cls):
-        super(BaseVolumeQuotasAdminTestJSON, cls).resource_setup()
+        super(VolumeQuotasAdminTestJSON, cls).resource_setup()
 
         # Save the current set of quotas so that some tests may use it
         # to restore the quotas to their original values after they are
         # done.
-        cls.original_quota_set = (cls.admin_quotas_client.show_quota_set(
+        original_quota_set = (cls.admin_quotas_client.show_quota_set(
             cls.demo_tenant_id)['quota_set'])
         cls.cleanup_quota_set = dict(
-            (k, v) for k, v in cls.original_quota_set.items()
-            if k in QUOTA_KEYS)
+            (k, v) for k, v in original_quota_set.items() if k in QUOTA_KEYS)
 
     @decorators.idempotent_id('59eada70-403c-4cef-a2a3-a8ce2f1b07a0')
     def test_list_quotas(self):
-        quotas = (self.admin_quotas_client.show_quota_set(self.demo_tenant_id)
-                  ['quota_set'])
-        for key in QUOTA_KEYS:
-            self.assertIn(key, quotas)
+        # Check response schema
+        self.admin_quotas_client.show_quota_set(self.demo_tenant_id)
 
     @decorators.idempotent_id('2be020a2-5fdd-423d-8d35-a7ffbc36e9f7')
     def test_list_default_quotas(self):
-        quotas = self.admin_quotas_client.show_default_quota_set(
-            self.demo_tenant_id)['quota_set']
-        for key in QUOTA_KEYS:
-            self.assertIn(key, quotas)
+        # Check response schema
+        self.admin_quotas_client.show_default_quota_set(self.demo_tenant_id)
 
     @decorators.idempotent_id('3d45c99e-cc42-4424-a56e-5cbd212b63a6')
     def test_update_all_quota_resources_for_tenant(self):
@@ -93,13 +87,9 @@ class BaseVolumeQuotasAdminTestJSON(base.BaseVolumeAdminTest):
 
     @decorators.idempotent_id('18c51ae9-cb03-48fc-b234-14a19374dbed')
     def test_show_quota_usage(self):
-        quota_usage = self.admin_quotas_client.show_quota_set(
-            self.os_admin.credentials.tenant_id,
-            params={'usage': True})['quota_set']
-        for key in QUOTA_KEYS:
-            self.assertIn(key, quota_usage)
-            for usage_key in QUOTA_USAGE_KEYS:
-                self.assertIn(usage_key, quota_usage[key])
+        # Check response schema
+        self.admin_quotas_client.show_quota_set(
+            self.os_admin.credentials.tenant_id, params={'usage': True})
 
     @decorators.idempotent_id('874b35a9-51f1-4258-bec5-cd561b6690d3')
     def test_delete_quota(self):

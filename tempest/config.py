@@ -20,6 +20,7 @@ import tempfile
 
 from oslo_concurrency import lockutils
 from oslo_config import cfg
+from oslo_config import types
 from oslo_log import log as logging
 
 from tempest.lib import exceptions
@@ -76,10 +77,7 @@ AuthGroup = [
     cfg.StrOpt('default_credentials_domain_name',
                default='Default',
                help="Default domain used when getting v3 credentials. "
-                    "This is the name keystone uses for v2 compatibility.",
-               deprecated_opts=[cfg.DeprecatedOpt(
-                                'tenant_isolation_domain_name',
-                                group='auth')]),
+                    "This is the name keystone uses for v2 compatibility."),
     cfg.BoolOpt('create_isolated_networks',
                 default=True,
                 help="If use_dynamic_credentials is set to True and Neutron "
@@ -91,27 +89,20 @@ AuthGroup = [
     cfg.StrOpt('admin_username',
                help="Username for an administrative user. This is needed for "
                     "authenticating requests made by project isolation to "
-                    "create users and projects",
-               deprecated_group='identity'),
+                    "create users and projects"),
     cfg.StrOpt('admin_project_name',
                help="Project name to use for an administrative user. This is "
                     "needed for authenticating requests made by project "
-                    "isolation to create users and projects",
-               deprecated_opts=[cfg.DeprecatedOpt('admin_tenant_name',
-                                                  group='auth'),
-                                cfg.DeprecatedOpt('admin_tenant_name',
-                                                  group='identity')]),
+                    "isolation to create users and projects"),
     cfg.StrOpt('admin_password',
                help="Password to use for an administrative user. This is "
                     "needed for authenticating requests made by project "
                     "isolation to create users and projects",
-               secret=True,
-               deprecated_group='identity'),
+               secret=True),
     cfg.StrOpt('admin_domain_name',
                default='Default',
-               help="Admin domain name for authentication (Keystone V3)."
-                    "The same domain applies to user and project",
-               deprecated_group='identity'),
+               help="Admin domain name for authentication (Keystone V3). "
+                    "The same domain applies to user and project"),
 ]
 
 identity_group = cfg.OptGroup(name='identity',
@@ -153,9 +144,7 @@ IdentityGroup = [
                choices=['public', 'admin', 'internal',
                         'publicURL', 'adminURL', 'internalURL'],
                help="The public endpoint type to use for OpenStack Identity "
-                    "(Keystone) API v2",
-               deprecated_opts=[cfg.DeprecatedOpt('endpoint_type',
-                                                  group='identity')]),
+                    "(Keystone) API v2"),
     cfg.StrOpt('v3_endpoint_type',
                default='adminURL',
                choices=['public', 'admin', 'internal',
@@ -178,15 +167,35 @@ IdentityGroup = [
     cfg.IntOpt('user_lockout_failure_attempts',
                default=2,
                help="The number of unsuccessful login attempts the user is "
-                    "allowed before having the account locked."),
+                    "allowed before having the account locked. This only "
+                    "takes effect when identity-feature-enabled."
+                    "security_compliance is set to 'True'. For more details, "
+                    "refer to keystone config options keystone.conf:"
+                    "security_compliance.lockout_failure_attempts. "
+                    "This feature is disabled by default in keystone."),
     cfg.IntOpt('user_lockout_duration',
                default=5,
                help="The number of seconds a user account will remain "
-                    "locked."),
+                    "locked. This only takes "
+                    "effect when identity-feature-enabled.security_compliance "
+                    "is set to 'True'. For more details, refer to "
+                    "keystone config options "
+                    "keystone.conf:security_compliance.lockout_duration. "
+                    "Setting this option will have no effect unless you also "
+                    "set identity.user_lockout_failure_attempts."),
     cfg.IntOpt('user_unique_last_password_count',
                default=2,
                help="The number of passwords for a user that must be unique "
-                    "before an old password can be reused."),
+                    "before an old password can be reused. This only takes "
+                    "effect when identity-feature-enabled.security_compliance "
+                    "is set to 'True'. "
+                    "This config option corresponds to keystone.conf: "
+                    "security_compliance.unique_last_password_count, whose "
+                    "default value is 0 meaning disabling this feature. "
+                    "NOTE: This config option value must be same as "
+                    "keystone.conf: security_compliance.unique_last_password_"
+                    "count otherwise test might fail"
+               ),
 ]
 
 service_clients_group = cfg.OptGroup(name='service-clients',
@@ -250,7 +259,13 @@ IdentityFeatureGroup = [
     cfg.BoolOpt('application_credentials',
                 default=False,
                 help='Does the environment have application credentials '
-                     'enabled?')
+                     'enabled?'),
+    cfg.BoolOpt('immutable_user_source',
+                default=False,
+                help='Set to True if the environment has a read-only '
+                     'user source. This will skip all tests that attempt to '
+                     'create, delete, or modify users. This should not be set '
+                     'to True if using dynamic credentials')
 ]
 
 compute_group = cfg.OptGroup(name='compute',
@@ -264,6 +279,17 @@ ComputeGroup = [
                help="Valid secondary image reference to be used in tests. "
                     "This is a required option, but if only one image is "
                     "available duplicate the value of image_ref above"),
+    cfg.StrOpt('certified_image_ref',
+               help="Valid image reference to be used in image certificate "
+                    "validation tests when enabled. This image must also "
+                    "have the required img_signature_* properties set. "
+                    "Additional details available within the following Nova "
+                    "documentation: https://docs.openstack.org/nova/latest/"
+                    "user/certificate-validation.html"),
+    cfg.ListOpt('certified_image_trusted_certs',
+                help="A list of trusted certificates to be used when the "
+                     "image certificate validation compute feature is "
+                     "enabled."),
     cfg.StrOpt('flavor_ref',
                default="1",
                help="Valid primary flavor to use in tests."),
@@ -314,7 +340,7 @@ ComputeGroup = [
                help='Time in seconds before a shelved instance is eligible '
                     'for removing from a host.  -1 never offload, 0 offload '
                     'when shelved. This configuration value should be same as '
-                    '[nova.DEFAULT]->shelved_offload_time in nova.conf, and '
+                    'nova.conf: DEFAULT.shelved_offload_time, and '
                     'some tests will run for as long as the time.'),
     cfg.IntOpt('min_compute_nodes',
                default=1,
@@ -348,8 +374,52 @@ ComputeGroup = [
     cfg.StrOpt('vm_availability_zone',
                default=None,
                help="Availability zone for instance launch"),
-
+    cfg.StrOpt('compute_volume_common_az',
+               default=None,
+               help='AZ to be used for Cinder and Nova. Set this parameter '
+                    'when the cloud has nova.conf: cinder.cross_az_attach '
+                    'set to false. Which means volumes attached to an '
+                    'instance must be in the same availability zone in Cinder '
+                    'as the instance availability zone in Nova. Set the '
+                    'common availability zone in this config which will be '
+                    'used to boot an instance as well as creating a volume. '
+                    'NOTE: If that AZ is not in Cinder (or '
+                    'allow_availability_zone_fallback=False in cinder.conf), '
+                    'the volume create request will fail and the instance '
+                    'will fail the build request.'),
 ]
+
+placement_group = cfg.OptGroup(name='placement',
+                               title='Placement Service Options')
+
+PlacementGroup = [
+    cfg.StrOpt('endpoint_type',
+               default='public',
+               choices=['public', 'admin', 'internal'],
+               help="The endpoint type to use for the placement service."),
+    cfg.StrOpt('catalog_type',
+               default='placement',
+               help="Catalog type of the Placement service."),
+    cfg.StrOpt('region',
+               default='RegionOne',
+               help="The placement region name to use. If empty, the value "
+                    "of [identity]/region is used instead. If no such region "
+                    "is found in the service catalog, the first region found "
+                    "is used."),
+    cfg.StrOpt('min_microversion',
+               default=None,
+               help="Lower version of the test target microversion range. "
+                    "The format is 'X.Y', where 'X' and 'Y' are int values. "
+                    "Valid values are string with format 'X.Y' or string "
+                    "'latest'"),
+    cfg.StrOpt('max_microversion',
+               default=None,
+               help="Upper version of the test target microversion range. "
+                    "The format is 'X.Y', where 'X' and 'Y' are int values. "
+                    "Valid values are string with format 'X.Y' or string "
+                    "'latest'"),
+]
+
 
 compute_features_group = cfg.OptGroup(name='compute-feature-enabled',
                                       title="Enabled Compute Service Features")
@@ -420,24 +490,29 @@ ComputeFeaturesGroup = [
     cfg.BoolOpt('vnc_console',
                 default=False,
                 help='Enable VNC console. This configuration value should '
-                     'be same as [nova.vnc]->vnc_enabled in nova.conf'),
+                     'be same as nova.conf: vnc.enabled'),
     cfg.StrOpt('vnc_server_header',
                default='WebSockify',
                help='Expected VNC server name (WebSockify, nginx, etc) '
-                    'in response header.'),
+                    'in response header.',
+               deprecated_for_removal=True,
+               deprecated_reason='This option will be ignored because the '
+                                 'usage of different response header fields '
+                                 'to accomplish the same goal (in accordance '
+                                 'with RFC7231 S6.2.2) makes it obsolete.'),
     cfg.BoolOpt('spice_console',
                 default=False,
                 help='Enable Spice console. This configuration value should '
-                     'be same as [nova.spice]->enabled in nova.conf'),
+                     'be same as nova.conf: spice.enabled'),
     cfg.BoolOpt('rdp_console',
                 default=False,
                 help='Enable RDP console. This configuration value should '
-                     'be same as [nova.rdp]->enabled in nova.conf'),
+                     'be same as nova.conf: rdp.enabled'),
     cfg.BoolOpt('serial_console',
                 default=False,
                 help='Enable serial console. This configuration value '
-                     'should be the same as [nova.serial_console]->enabled '
-                     'in nova.conf'),
+                     'should be the same as '
+                     'nova.conf: serial_console.enabled'),
     cfg.BoolOpt('rescue',
                 default=True,
                 help='Does the test environment support instance rescue '
@@ -475,20 +550,29 @@ ComputeFeaturesGroup = [
     cfg.BoolOpt('config_drive',
                 default=True,
                 help='Enable special configuration drive with metadata.'),
-    cfg.ListOpt('scheduler_available_filters',
-                default=['all'],
-                help="A list of enabled filters that nova will accept as hints"
-                     " to the scheduler when creating a server. A special "
-                     "entry 'all' indicates all filters that are included "
-                     "with nova are enabled. Empty list indicates all filters "
-                     "are disabled. The full list of available filters is in "
-                     "nova.conf: DEFAULT.scheduler_available_filters. If the "
+    cfg.ListOpt('scheduler_enabled_filters',
+                default=["AvailabilityZoneFilter", "ComputeFilter",
+                         "ComputeCapabilitiesFilter", "ImagePropertiesFilter",
+                         "ServerGroupAntiAffinityFilter",
+                         "ServerGroupAffinityFilter"],
+                help="A list of enabled filters that Nova will accept as "
+                     "hints to the scheduler when creating a server. If the "
                      "default value is overridden in nova.conf by the test "
                      "environment (which means that a different set of "
                      "filters is enabled than what is included in Nova by "
-                     "default) then, this option must be configured to "
+                     "default), then this option must be configured to "
                      "contain the same filters that Nova uses in the test "
-                     "environment."),
+                     "environment. A special entry 'all' indicates all "
+                     "filters that are included with Nova are enabled. If "
+                     "using 'all', be sure to enable all filters in "
+                     "nova.conf, as tests can fail in unpredictable ways if "
+                     "Nova's and Tempest's enabled filters don't match. "
+                     "Empty list indicates all filters are disabled. The "
+                     "full list of enabled filters is in nova.conf: "
+                     "filter_scheduler.enabled_filters.",
+                deprecated_opts=[cfg.DeprecatedOpt(
+                    'scheduler_available_filters',
+                    group='compute-feature-enabled')]),
     cfg.BoolOpt('swap_volume',
                 default=False,
                 help='Does the test environment support in-place swapping of '
@@ -559,7 +643,7 @@ ImageFeaturesGroup = [
                                   'test v2 APIs only so this config option '
                                   'will be removed.'),
     cfg.BoolOpt('api_v1',
-                default=True,
+                default=False,
                 help="Is the v1 image API enabled",
                 deprecated_for_removal=True,
                 deprecated_reason='Glance v1 APIs are deprecated and v2 APIs '
@@ -571,6 +655,7 @@ ImageFeaturesGroup = [
 network_group = cfg.OptGroup(name='network',
                              title='Network Service Options')
 
+ProfileType = types.Dict(types.List(types.String(), bounds=True))
 NetworkGroup = [
     cfg.StrOpt('catalog_type',
                default='network',
@@ -593,7 +678,7 @@ NetworkGroup = [
                default=28,
                help="The mask bits for project ipv4 subnets"),
     cfg.StrOpt('project_network_v6_cidr',
-               default="2003::/48",
+               default="2001:db8::/48",
                help="The cidr block to allocate project ipv6 subnets from"),
     cfg.IntOpt('project_network_v6_mask_bits',
                default=64,
@@ -627,17 +712,21 @@ NetworkGroup = [
     cfg.ListOpt('dns_servers',
                 default=["8.8.8.8", "8.8.4.4"],
                 help="List of dns servers which should be used"
-                     " for subnet creation"),
+                     " for subnet creation",
+                deprecated_for_removal=True,
+                deprecated_reason="This config option is no longer "
+                                  "used anywhere, so it can be removed."),
     cfg.StrOpt('port_vnic_type',
                choices=[None, 'normal', 'direct', 'macvtap'],
                help="vnic_type to use when launching instances"
                     " with pre-configured ports."
                     " Supported ports are:"
                     " ['normal','direct','macvtap']"),
-    cfg.DictOpt('port_profile',
-                default={},
-                help="port profile to use when launching instances"
-                     " with pre-configured ports."),
+    cfg.Opt('port_profile',
+            type=ProfileType,
+            default={},
+            help="port profile to use when launching instances"
+                 " with pre-configured ports."),
     cfg.ListOpt('default_network',
                 default=["1.0.0.0/16", "2.0.0.0/16"],
                 help="List of ip pools"
@@ -680,7 +769,13 @@ NetworkFeaturesGroup = [
                 help="Does the test environment support port security?"),
     cfg.BoolOpt('floating_ips',
                 default=True,
-                help='Does the test environment support floating_ips')
+                help='Does the test environment support floating_ips'),
+    cfg.StrOpt('qos_placement_physnet', default=None,
+               help='Name of the physnet for placement based minimum '
+                    'bandwidth allocation.'),
+    cfg.StrOpt('provider_net_base_segmentation_id', default=3000,
+               help='Base segmentation ID to create provider networks. '
+                    'This value will be increased in case of conflict.')
 ]
 
 validation_group = cfg.OptGroup(name='validation',
@@ -688,9 +783,11 @@ validation_group = cfg.OptGroup(name='validation',
 
 ValidationGroup = [
     cfg.BoolOpt('run_validation',
-                default=False,
+                default=True,
                 help='Enable ssh on created servers and creation of additional'
-                     ' validation resources to enable remote access'),
+                     ' validation resources to enable remote access.'
+                     ' In case the guest does not support ssh set it'
+                     ' to false'),
     cfg.BoolOpt('security_group',
                 default=True,
                 help='Enable/disable security groups.'),
@@ -729,7 +826,7 @@ ValidationGroup = [
                default="password",
                help="Password used to authenticate to an instance."),
     cfg.StrOpt('ssh_shell_prologue',
-               default="set -eu -o pipefail; PATH=$$PATH:/sbin;",
+               default="set -eu -o pipefail; PATH=$$PATH:/sbin:/usr/sbin;",
                help="Shell fragments to use before executing a command "
                     "when sshing to a guest."),
     cfg.IntOpt('ping_size',
@@ -856,13 +953,6 @@ VolumeFeaturesGroup = [
                 help='A list of enabled volume extensions with a special '
                      'entry all which indicates every extension is enabled. '
                      'Empty list indicates all extensions are disabled'),
-    cfg.BoolOpt('api_v1',
-                default=False,
-                help="Is the v1 volume API enabled",
-                deprecated_for_removal=True,
-                deprecated_reason="The v1 volume API has been deprecated "
-                                  "since Juno release, and the API will be "
-                                  "removed."),
     cfg.BoolOpt('api_v2',
                 default=True,
                 help="Is the v2 volume API enabled",
@@ -1003,7 +1093,12 @@ ScenarioGroup = [
                choices=["udhcpc", "dhclient", ""],
                help='DHCP client used by images to renew DCHP lease. '
                     'If left empty, update operation will be skipped. '
-                    'Supported clients: "udhcpc", "dhclient"')
+                    'Supported clients: "udhcpc", "dhclient"'),
+    cfg.StrOpt('protocol',
+               default='icmp',
+               choices=('icmp', 'tcp', 'udp'),
+               help='The protocol used in security groups tests to check '
+                    'connectivity.'),
 ]
 
 
@@ -1052,6 +1147,18 @@ Expected values for this field are:
 If nothing is specified, this feature is not enabled. To trace everything
 specify .* as the regex.
 """)
+]
+
+
+profiler_group = cfg.OptGroup(name="profiler",
+                              title="OpenStack Profiler")
+
+ProfilerGroup = [
+    cfg.StrOpt('key',
+               help="The secret key to enable OpenStack Profiler. The value "
+                    "should match the one configured in OpenStack services "
+                    "under `[profiler]/hmac_keys` property. The default empty "
+                    "value keeps profiling disabled"),
 ]
 
 DefaultGroup = [
@@ -1150,8 +1257,10 @@ _opts = [
     (scenario_group, ScenarioGroup),
     (service_available_group, ServiceAvailableGroup),
     (debug_group, DebugGroup),
-    (None, DefaultGroup),
     (workloadmgr_group, WorkloadmgrGroup),
+    (placement_group, PlacementGroup),
+    (profiler_group, ProfilerGroup),
+    (None, DefaultGroup)
 ]
 
 
@@ -1269,7 +1378,7 @@ class TempestConfigPrivate(object):
 
         logging_cfg_path = "%s/logging.conf" % os.path.dirname(path)
         if ((not hasattr(_CONF, 'log_config_append') or
-            _CONF.log_config_append is None) and
+             _CONF.log_config_append is None) and
             os.path.isfile(logging_cfg_path)):
             # if logging conf is in place we need to set log_config_append
             _CONF.log_config_append = logging_cfg_path
@@ -1323,6 +1432,11 @@ class TempestConfigProxy(object):
 
     def set_config_path(self, path):
         self._path = path
+        # FIXME(masayukig): bug#1783751 To pass the config file path to child
+        # processes, we need to set the environment variables here as a
+        # workaround.
+        os.environ['TEMPEST_CONFIG_DIR'] = os.path.dirname(path)
+        os.environ['TEMPEST_CONFIG'] = os.path.basename(path)
 
 
 CONF = TempestConfigProxy()

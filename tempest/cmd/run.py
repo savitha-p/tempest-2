@@ -19,11 +19,11 @@ Test Selection
 ==============
 Tempest run has several options:
 
- * **--regex/-r**: This is a selection regex like what stestr uses. It will run
-                   any tests that match on re.match() with the regex
- * **--smoke/-s**: Run all the tests tagged as smoke
- * **--black-regex**: It allows to do simple test exclusion via passing a
-                      rejection/black regexp
+* ``--regex/-r``: This is a selection regex like what stestr uses. It will run
+  any tests that match on re.match() with the regex
+* ``--smoke/-s``: Run all the tests tagged as smoke
+* ``--black-regex``: It allows to do simple test exclusion via passing a
+  rejection/black regexp
 
 There are also the ``--blacklist-file`` and ``--whitelist-file`` options that
 let you pass a filepath to tempest run with the file format being a line
@@ -103,6 +103,9 @@ from tempest.cmd import workspace
 from tempest.common import credentials_factory as credentials
 from tempest import config
 
+if six.PY2:
+    # Python 2 has not FileNotFoundError exception
+    FileNotFoundError = IOError
 
 CONF = config.CONF
 SAVED_STATE_JSON = "saved_state.json"
@@ -112,7 +115,12 @@ class TempestRun(command.Command):
 
     def _set_env(self, config_file=None):
         if config_file:
-            CONF.set_config_path(os.path.abspath(config_file))
+            if os.path.exists(os.path.abspath(config_file)):
+                CONF.set_config_path(os.path.abspath(config_file))
+            else:
+                raise FileNotFoundError(
+                    "Config file: %s doesn't exist" % config_file)
+
         # NOTE(mtreinish): This is needed so that stestr doesn't gobble up any
         # stacktraces on failure.
         if 'TESTR_PDB' in os.environ:
@@ -160,8 +168,6 @@ class TempestRun(command.Command):
             sys.exit(2)
         if parsed_args.state:
             self._init_state()
-        else:
-            pass
 
         regex = self._build_regex(parsed_args)
         return_code = 0
@@ -204,8 +210,8 @@ class TempestRun(command.Command):
             svc.run()
 
         with open(SAVED_STATE_JSON, 'w+') as f:
-            f.write(json.dumps(data,
-                    sort_keys=True, indent=2, separators=(',', ': ')))
+            f.write(json.dumps(data, sort_keys=True,
+                               indent=2, separators=(',', ': ')))
 
     def get_parser(self, prog_name):
         parser = super(TempestRun, self).get_parser(prog_name)
@@ -245,8 +251,8 @@ class TempestRun(command.Command):
         parser.add_argument('--load-list', '--load_list',
                             help='Path to a non-regex whitelist file, '
                                  'this file contains a separate test '
-                                 'on each newline. This command'
-                                 'supports files created by the tempest'
+                                 'on each newline. This command '
+                                 'supports files created by the tempest '
                                  'run ``--list-tests`` command')
         # list only args
         parser.add_argument('--list-tests', '-l', action='store_true',
@@ -254,6 +260,7 @@ class TempestRun(command.Command):
                             default=False)
         # execution args
         parser.add_argument('--concurrency', '-w',
+                            type=int, default=0,
                             help="The number of workers to use, defaults to "
                                  "the number of cpus")
         parallel = parser.add_mutually_exclusive_group()

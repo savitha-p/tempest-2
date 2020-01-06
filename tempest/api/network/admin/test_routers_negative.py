@@ -18,6 +18,8 @@ import testtools
 from tempest.api.network import base
 from tempest.common import utils
 from tempest import config
+from tempest.lib.common.utils import data_utils
+from tempest.lib.common.utils import test_utils
 from tempest.lib import decorators
 from tempest.lib import exceptions as lib_exc
 
@@ -41,8 +43,10 @@ class RoutersAdminNegativeTest(base.BaseAdminNetworkTest):
     def test_router_set_gateway_used_ip_returns_409(self):
         # At first create a address from public_network_id
         port = self.admin_ports_client.create_port(
+            name=data_utils.rand_name(self.__class__.__name__),
             network_id=CONF.network.public_network_id)['port']
-        self.addCleanup(self.admin_ports_client.delete_port,
+        self.addCleanup(test_utils.call_and_ignore_notfound_exc,
+                        self.admin_ports_client.delete_port,
                         port_id=port['id'])
         # Add used ip and subnet_id in external_fixed_ips
         fixed_ip = {

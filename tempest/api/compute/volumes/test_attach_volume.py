@@ -41,11 +41,6 @@ class BaseAttachVolumeTest(base.BaseV2ComputeTest):
         cls.prepare_instance_network()
         super(BaseAttachVolumeTest, cls).setup_credentials()
 
-    @classmethod
-    def resource_setup(cls):
-        super(BaseAttachVolumeTest, cls).resource_setup()
-        cls.device = CONF.compute.volume_device_name
-
     def _create_server(self):
         # Start a server and wait for it to become ready
         validation_resources = self.get_test_validation_resources(
@@ -65,6 +60,8 @@ class BaseAttachVolumeTest(base.BaseV2ComputeTest):
 class AttachVolumeTestJSON(BaseAttachVolumeTest):
 
     @decorators.idempotent_id('52e9045a-e90d-4c0d-9087-79d657faffff')
+    # This test is conditionally marked slow if SSH validation is enabled.
+    @decorators.attr(type='slow', condition=CONF.validation.run_validation)
     def test_attach_detach_volume(self):
         # Stop and Start a server with an attached volume, ensuring that
         # the volume remains attached.
@@ -82,10 +79,18 @@ class AttachVolumeTestJSON(BaseAttachVolumeTest):
             # NOTE(andreaf) We need to ensure the ssh key has been
             # injected in the guest before we power cycle
             linux_client.validate_authentication()
+            disks_before_attach = linux_client.count_disks()
 
         volume = self.create_volume()
-        attachment = self.attach_volume(server, volume,
-                                        device=('/dev/%s' % self.device))
+
+        # NOTE: As of the 12.0.0 Liberty release, the Nova libvirt driver
+        # no longer honors a user-supplied device name, and there can be
+        # a mismatch between libvirt provide disk name and actual disk name
+        # on instance, hence we no longer validate this test with the supplied
+        # device name rather we count number of disk before attach
+        # detach to validate the testcase.
+
+        attachment = self.attach_volume(server, volume)
 
         self.servers_client.stop_server(server['id'])
         waiters.wait_for_server_status(self.servers_client, server['id'],
@@ -96,9 +101,8 @@ class AttachVolumeTestJSON(BaseAttachVolumeTest):
                                        'ACTIVE')
 
         if CONF.validation.run_validation:
-            disks = linux_client.get_disks()
-            device_name_to_match = '\n' + self.device + ' '
-            self.assertIn(device_name_to_match, disks)
+            disks_after_attach = linux_client.count_disks()
+            self.assertGreater(disks_after_attach, disks_before_attach)
 
         self.servers_client.detach_volume(server['id'], attachment['volumeId'])
         waiters.wait_for_volume_resource_status(
@@ -113,16 +117,15 @@ class AttachVolumeTestJSON(BaseAttachVolumeTest):
                                        'ACTIVE')
 
         if CONF.validation.run_validation:
-            disks = linux_client.get_disks()
-            self.assertNotIn(device_name_to_match, disks)
+            disks_after_detach = linux_client.count_disks()
+            self.assertEqual(disks_before_attach, disks_after_detach)
 
     @decorators.idempotent_id('7fa563fe-f0f7-43eb-9e22-a1ece036b513')
     def test_list_get_volume_attachments(self):
         # List volume attachment of the server
-        server, _ = self._create_server()
+        server, validation_resources = self._create_server()
         volume_1st = self.create_volume()
-        attachment_1st = self.attach_volume(server, volume_1st,
-                                            device=('/dev/%s' % self.device))
+        attachment_1st = self.attach_volume(server, volume_1st)
         body = self.servers_client.list_volume_attachments(
             server['id'])['volumeAttachments']
         self.assertEqual(1, len(body))
@@ -143,6 +146,16 @@ class AttachVolumeTestJSON(BaseAttachVolumeTest):
             server['id'])['volumeAttachments']
         self.assertEqual(2, len(body))
 
+        if CONF.validation.run_validation:
+            linux_client = remote_client.RemoteClient(
+                self.get_server_ip(server, validation_resources),
+                self.image_ssh_user,
+                self.image_ssh_password,
+                validation_resources['keypair']['private_key'],
+                server=server,
+                servers_client=self.servers_client)
+            linux_client.validate_authentication()
+
         for attachment in [attachment_1st, attachment_2nd]:
             body = self.servers_client.show_volume_attachment(
                 server['id'], attachment['id'])['volumeAttachment']
@@ -160,6 +173,9 @@ class AttachVolumeShelveTestJSON(BaseAttachVolumeTest):
 
     This test checks the attaching and detaching volumes from
     a shelved or shelved offload instance.
+
+    Note that these are uncommon scenarios until blueprint detach-boot-volume
+    is implemented in the compute service.
     """
 
     min_microversion = '2.20'
@@ -220,6 +236,9 @@ class AttachVolumeShelveTestJSON(BaseAttachVolumeTest):
                 server, validation_resources)
             self.assertEqual(number_of_volumes, counted_volumes)
 
+    # NOTE(mriedem): Marked as slow since this is an uncommon scenario until
+    # attach/detach root volume is supported in nova, and it's slow.
+    @decorators.attr(type='slow')
     @decorators.idempotent_id('13a940b6-3474-4c3c-b03f-29b89112bfee')
     def test_attach_volume_shelved_or_offload_server(self):
         # Create server, count number of volumes on it, shelve
@@ -228,8 +247,7 @@ class AttachVolumeShelveTestJSON(BaseAttachVolumeTest):
         volume = self.create_volume()
         num_vol = self._count_volumes(server, validation_resources)
         self._shelve_server(server, validation_resources)
-        attachment = self.attach_volume(server, volume,
-                                        device=('/dev/%s' % self.device))
+        attachment = self.attach_volume(server, volume)
 
         # Unshelve the instance and check that attached volume exists
         self._unshelve_server_and_check_volumes(
@@ -245,6 +263,9 @@ class AttachVolumeShelveTestJSON(BaseAttachVolumeTest):
         # case of shelved_offloaded.
         self.assertIsNotNone(volume_attachment['device'])
 
+    # NOTE(mriedem): Marked as slow since this is an uncommon scenario until
+    # attach/detach root volume is supported in nova, and it's slow.
+    @decorators.attr(type='slow')
     @decorators.idempotent_id('b54e86dd-a070-49c4-9c07-59ae6dae15aa')
     def test_detach_volume_shelved_or_offload_server(self):
         # Count number of volumes on instance, shelve
@@ -255,7 +276,7 @@ class AttachVolumeShelveTestJSON(BaseAttachVolumeTest):
         self._shelve_server(server, validation_resources)
 
         # Attach and then detach the volume
-        self.attach_volume(server, volume, device=('/dev/%s' % self.device))
+        self.attach_volume(server, volume)
         self.servers_client.detach_volume(server['id'], volume['id'])
         waiters.wait_for_volume_resource_status(self.volumes_client,
                                                 volume['id'], 'available')

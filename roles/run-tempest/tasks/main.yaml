@@ -35,10 +35,11 @@
       when: blacklist_stat.stat.exists
 
 - name: Run Tempest
-  command: tox -e {{tox_envlist}} -- {{tempest_test_regex|quote}} {{blacklist_option|default('')}} \
+  command: tox -e {{tox_envlist}} {{tox_extra_args}} -- {{tempest_test_regex|quote}} {{blacklist_option|default('')}} \
             --concurrency={{tempest_concurrency|default(default_concurrency)}} \
             --black-regex={{tempest_black_regex|quote}}
   args:
     chdir: "{{devstack_base_dir}}/tempest"
   become: true
   become_user: tempest
+  environment: '{{ {"OS_TEST_TIMEOUT": tempest_test_timeout} if tempest_test_timeout else {} }}'

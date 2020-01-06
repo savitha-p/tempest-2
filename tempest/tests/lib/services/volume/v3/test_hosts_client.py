@@ -18,7 +18,7 @@ from tempest.tests.lib import fake_auth_provider
 from tempest.tests.lib.services import base
 
 
-class TestQuotasClient(base.BaseServiceTest):
+class TestHostsClient(base.BaseServiceTest):
     FAKE_LIST_HOSTS = {
         "hosts": [
             {
@@ -48,7 +48,7 @@ class TestQuotasClient(base.BaseServiceTest):
                     "total_volume_gb": "2",
                     "total_snapshot_gb": "0",
                     "project": "(total)",
-                    "host": "fake-host",
+                    "host": "fake-host@rbd",
                     "snapshot_count": "0"
                 }
             },
@@ -58,7 +58,7 @@ class TestQuotasClient(base.BaseServiceTest):
                     "total_volume_gb": "2",
                     "total_snapshot_gb": "0",
                     "project": "f21a9c86d7114bf99c711f4874d80474",
-                    "host": "fake-host",
+                    "host": "fake-host@lvm",
                     "snapshot_count": "0"
                 }
             }
@@ -66,7 +66,7 @@ class TestQuotasClient(base.BaseServiceTest):
     }
 
     def setUp(self):
-        super(TestQuotasClient, self).setUp()
+        super(TestHostsClient, self).setUp()
         fake_auth = fake_auth_provider.FakeAuthProvider()
         self.client = hosts_client.HostsClient(fake_auth,
                                                'volume',

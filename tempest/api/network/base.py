@@ -88,9 +88,6 @@ class BaseNetworkTest(tempest.test.BaseTestCase):
     @classmethod
     def resource_setup(cls):
         super(BaseNetworkTest, cls).resource_setup()
-        cls.subnets = []
-        cls.ports = []
-        cls.routers = []
         cls.ethertype = "IPv" + str(cls._ip_version)
         if cls._ip_version == 4:
             cls.cidr = netaddr.IPNetwork(CONF.network.project_network_cidr)
@@ -155,18 +152,18 @@ class BaseNetworkTest(tempest.test.BaseTestCase):
         cls.addClassResourceCleanup(test_utils.call_and_ignore_notfound_exc,
                                     cls.subnets_client.delete_subnet,
                                     subnet['id'])
-        cls.subnets.append(subnet)
         return subnet
 
     @classmethod
     def create_port(cls, network, **kwargs):
+        if 'name' not in kwargs:
+            kwargs['name'] = data_utils.rand_name(cls.__name__)
         """Wrapper utility that returns a test port."""
         body = cls.ports_client.create_port(network_id=network['id'],
                                             **kwargs)
         port = body['port']
         cls.addClassResourceCleanup(test_utils.call_and_ignore_notfound_exc,
                                     cls.ports_client.delete_port, port['id'])
-        cls.ports.append(port)
         return port
 
     @classmethod
@@ -194,7 +191,6 @@ class BaseNetworkTest(tempest.test.BaseTestCase):
         router = body['router']
         cls.addClassResourceCleanup(test_utils.call_and_ignore_notfound_exc,
                                     cls.delete_router, router)
-        cls.routers.append(router)
         return router
 
     @classmethod

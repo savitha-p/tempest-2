@@ -57,6 +57,13 @@ class BasicOperationsImagesTest(base.BaseV2ImageTest):
         self.assertIn('status', image)
         self.assertEqual('queued', image['status'])
 
+        # NOTE: This Glance API returns different status codes for image
+        # condition. In this empty data case, Glance should return 204,
+        # so here should check the status code.
+        image_file = self.client.show_image_file(image['id'])
+        self.assertEqual(0, len(image_file.data))
+        self.assertEqual(204, image_file.response.status)
+
         # Now try uploading an image file
         file_content = data_utils.random_bytes()
         image_file = six.BytesIO(file_content)
@@ -114,17 +121,6 @@ class BasicOperationsImagesTest(base.BaseV2ImageTest):
                                   disk_format=disk_format,
                                   visibility='private')
         self.assertEqual('queued', image['status'])
-
-        # NOTE: This Glance API returns different status codes for image
-        # condition. In this empty data case, Glance should return 204,
-        # so here should check the status code.
-        image_file = self.client.show_image_file(image['id'])
-        self.assertEqual(0, len(image_file.data))
-        self.assertEqual(204, image_file.response.status)
-
-        # Now try uploading an image file
-        image_file = six.BytesIO(data_utils.random_bytes())
-        self.client.store_image_file(image['id'], image_file)
 
         # Update Image
         new_image_name = data_utils.rand_name('new-image')
@@ -185,7 +181,7 @@ class ListUserImagesTest(base.BaseV2ImageTest):
                      for disk_fmt in disk_fmts]
 
         for (container_fmt, disk_fmt) in all_pairs[:6]:
-            LOG.debug("Creating an image"
+            LOG.debug("Creating an image "
                       "(Container format: %s, Disk format: %s).",
                       container_fmt, disk_fmt)
             cls._create_standard_image(container_fmt, disk_fmt)

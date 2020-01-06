@@ -92,6 +92,7 @@ class ServerActionsTestJSON(base.BaseV2ComputeTest):
             validatable=True,
             validation_resources=validation_resources,
             wait_until='ACTIVE')
+        self.addCleanup(self.delete_server, newserver['id'])
         # The server's password should be set to the provided password
         new_password = 'Newpass1234'
         self.client.change_password(newserver['id'], adminPass=new_password)
@@ -265,6 +266,11 @@ class ServerActionsTestJSON(base.BaseV2ComputeTest):
 
         self.client.start_server(self.server_id)
 
+    # NOTE(mriedem): Marked as slow because while rebuild and volume-backed is
+    # common, we don't actually change the image (you can't with volume-backed
+    # rebuild) so this isn't testing much outside normal rebuild
+    # (and it's slow).
+    @decorators.attr(type='slow')
     @decorators.idempotent_id('b68bd8d6-855d-4212-b59b-2e704044dace')
     @utils.services('volume')
     def test_rebuild_server_with_volume_attached(self):
@@ -283,6 +289,17 @@ class ServerActionsTestJSON(base.BaseV2ComputeTest):
         self.assertEqual('in-use', vol_after_rebuild['status'])
         self.assertEqual(self.server_id,
                          vol_after_rebuild['attachments'][0]['server_id'])
+        if CONF.validation.run_validation:
+            validation_resources = self.get_class_validation_resources(
+                self.os_primary)
+            linux_client = remote_client.RemoteClient(
+                self.get_server_ip(server, validation_resources),
+                self.ssh_user,
+                password=None,
+                pkey=validation_resources['keypair']['private_key'],
+                server=server,
+                servers_client=self.client)
+            linux_client.validate_authentication()
 
     def _test_resize_server_confirm(self, server_id, stop=False):
         # The server's RAM and disk space should be modified to that of
@@ -328,6 +345,9 @@ class ServerActionsTestJSON(base.BaseV2ComputeTest):
         # from setUp is not volume-backed.
         server = self.create_test_server(
             volume_backed=True, wait_until='ACTIVE')
+        # NOTE(mgoddard): Get detailed server to ensure addresses are present
+        # in fixed IP case.
+        server = self.servers_client.show_server(server['id'])['server']
         self._test_resize_server_confirm(server['id'])
         if CONF.compute_feature_enabled.console_output:
             # Now do something interactive with the guest like get its console
@@ -400,10 +420,7 @@ class ServerActionsTestJSON(base.BaseV2ComputeTest):
         waiters.wait_for_server_status(self.client, self.server_id, 'ACTIVE')
         # Make sure everything still looks OK.
         server = self.client.show_server(self.server_id)['server']
-        # The flavor id is not returned in the server response after
-        # microversion 2.46 so handle that gracefully.
-        if server['flavor'].get('id'):
-            self.assertEqual(self.flavor_ref, server['flavor']['id'])
+        self.assert_flavor_equal(self.flavor_ref, server['flavor'])
         attached_volumes = server['os-extended-volumes:volumes_attached']
         self.assertEqual(1, len(attached_volumes))
         self.assertEqual(volume['id'], attached_volumes[0]['id'])
@@ -690,16 +707,13 @@ class ServerActionsTestJSON(base.BaseV2ComputeTest):
     @testtools.skipUnless(CONF.compute_feature_enabled.vnc_console,
                           'VNC Console feature is disabled.')
     def test_get_vnc_console(self):
-        # Get the VNC console of type 'novnc' and 'xvpvnc'
-        console_types = ['novnc', 'xvpvnc']
-        for console_type in console_types:
-            if self.is_requested_microversion_compatible('2.5'):
-                body = self.client.get_vnc_console(
-                    self.server_id, type=console_type)['console']
-            else:
-                body = self.client.get_remote_console(
-                    self.server_id, console_type=console_type,
-                    protocol='vnc')['remote_console']
-            self.assertEqual(console_type, body['type'])
-            self.assertNotEqual('', body['url'])
-            self._validate_url(body['url'])
+        if self.is_requested_microversion_compatible('2.5'):
+            body = self.client.get_vnc_console(
+                self.server_id, type='novnc')['console']
+        else:
+            body = self.client.get_remote_console(
+                self.server_id, console_type='novnc',
+                protocol='vnc')['remote_console']
+        self.assertEqual('novnc', body['type'])
+        self.assertNotEqual('', body['url'])
+        self._validate_url(body['url'])

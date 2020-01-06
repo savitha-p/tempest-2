@@ -20,27 +20,35 @@ from tempest.tests.lib.services import base
 class TestEncryptionTypesClient(base.BaseServiceTest):
     FAKE_CREATE_ENCRYPTION_TYPE = {
         "encryption": {
-            "id": "cbc36478b0bd8e67e89",
-            "name": "FakeEncryptionType",
-            "type": "fakeType",
+            "volume_type_id": "cbc36478b0bd8e67e89",
+            "control_location": "front-end",
+            "encryption_id": "81e069c6-7394-4856-8df7-3b237ca61f74",
+            "key_size": 128,
             "provider": "LuksEncryptor",
-            "cipher": "aes-xts-plain64",
-            "key_size": "512",
-            "control_location": "front-end"
+            "cipher": "aes-xts-plain64"
+        }
+    }
+
+    FAKE_UPDATE_ENCRYPTION_TYPE = {
+        "encryption": {
+            "key_size": 64,
+            "provider": "LuksEncryptor",
+            "control_location": "front-end",
+            "cipher": "aes-xts-plain64"
         }
     }
 
     FAKE_INFO_ENCRYPTION_TYPE = {
-        "encryption": {
-            "name": "FakeEncryptionType",
-            "type": "fakeType",
-            "description": "test_description",
-            "volume_type": "fakeType",
-            "provider": "LuksEncryptor",
-            "cipher": "aes-xts-plain64",
-            "key_size": "512",
-            "control_location": "front-end"
-        }
+        "volume_type_id": "cbc36478b0bd8e67e89",
+        "control_location": "front-end",
+        "deleted": False,
+        "created_at": "2015-08-27T09:49:58-05:00",
+        "updated_at": "2015-08-29T09:49:58-05:00",
+        "encryption_id": "81e069c6-7394-4856-8df7-3b237ca61f74",
+        "key_size": 128,
+        "provider": "LuksEncryptor",
+        "deleted_at": "2015-08-30T09:49:58-05:00",
+        "cipher": "aes-xts-plain64"
     }
 
     FAKE_ENCRYPTION_SPECS_ITEM = {
@@ -50,10 +58,8 @@ class TestEncryptionTypesClient(base.BaseServiceTest):
     def setUp(self):
         super(TestEncryptionTypesClient, self).setUp()
         fake_auth = fake_auth_provider.FakeAuthProvider()
-        self.client = encryption_types_client.EncryptionTypesClient(fake_auth,
-                                                                    'volume',
-                                                                    'regionOne'
-                                                                    )
+        self.client = encryption_types_client.EncryptionTypesClient(
+            fake_auth, 'volume', 'regionOne')
 
     def _test_create_encryption(self, bytes_body=False):
         self.check_service_client_function(
@@ -101,3 +107,16 @@ class TestEncryptionTypesClient(base.BaseServiceTest):
             {},
             volume_type_id="cbc36478b0bd8e67e89",
             status=202)
+
+    def test_update_encryption_type_with_str_body(self):
+        self._test_update_encryption_type()
+
+    def test_update_encryption_type_with_bytes_body(self):
+        self._test_update_encryption_type(bytes_body=True)
+
+    def _test_update_encryption_type(self, bytes_body=False):
+        self.check_service_client_function(
+            self.client.update_encryption_type,
+            'tempest.lib.common.rest_client.RestClient.put',
+            self.FAKE_UPDATE_ENCRYPTION_TYPE,
+            bytes_body, volume_type_id="cbc36478b0bd8e67e89")

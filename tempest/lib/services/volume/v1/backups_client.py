@@ -28,7 +28,7 @@ class BackupsClient(rest_client.RestClient):
 
         For a full list of available parameters, please refer to the official
         API reference:
-        http://developer.openstack.org/api-ref/block-storage/v2/#create-backup
+        https://docs.openstack.org/api-ref/block-storage/v2/#create-backup
         """
         post_body = json.dumps({'backup': kwargs})
         resp, body = self.post('backups', post_body)
@@ -41,7 +41,7 @@ class BackupsClient(rest_client.RestClient):
 
         For a full list of available parameters, please refer to the official
         API reference:
-        http://developer.openstack.org/api-ref/block-storage/v2/#restore-backup
+        https://docs.openstack.org/api-ref/block-storage/v2/#restore-backup
         """
         post_body = json.dumps({'restore': kwargs})
         resp, body = self.post('backups/%s/restore' % (backup_id), post_body)
@@ -83,6 +83,9 @@ class BackupsClient(rest_client.RestClient):
 
     def import_backup(self, **kwargs):
         """Import backup metadata record."""
+        # TODO(linanbj): Current api-site doesn't contain this API description.
+        # After fixing the api-site, we need to fix here also for putting the
+        # link to api-site.
         post_body = json.dumps({'backup-record': kwargs})
         resp, body = self.post("backups/import_record", post_body)
         body = json.loads(body)

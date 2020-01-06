@@ -12,9 +12,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import json
-
 from oslo_log import log as logging
+from oslo_serialization import jsonutils as json
 
 from tempest.api.compute import base
 from tempest.common import utils
@@ -138,6 +137,9 @@ class TaggedBootDevicesTest(DeviceTaggingBase):
         except Exception:
             return False
 
+    # NOTE(mriedem): This is really more like a scenario test and is slow so
+    # it's marked as such.
+    @decorators.attr(type='slow')
     @decorators.idempotent_id('a2e65a6c-66f1-4442-aaa8-498c31778d96')
     @utils.services('network', 'volume', 'image')
     def test_tagged_boot_devices(self):
@@ -173,11 +175,13 @@ class TaggedBootDevicesTest(DeviceTaggingBase):
         # Create ports
         self.port1 = self.ports_client.create_port(
             network_id=net1['id'],
+            name=data_utils.rand_name(self.__class__.__name__),
             fixed_ips=[{'subnet_id': subnet1['id']}])['port']
         self.addCleanup(self.ports_client.delete_port, self.port1['id'])
 
         self.port2 = self.ports_client.create_port(
             network_id=net1['id'],
+            name=data_utils.rand_name(self.__class__.__name__),
             fixed_ips=[{'subnet_id': subnet1['id']}])['port']
         self.addCleanup(self.ports_client.delete_port, self.port2['id'])
 
@@ -356,6 +360,10 @@ class TaggedAttachmentsTest(DeviceTaggingBase):
             name=data_utils.rand_name('device-tagging-server'),
             networks=[{'uuid': self.get_tenant_network()['id']}])
         self.addCleanup(self.delete_server, server['id'])
+
+        # NOTE(mgoddard): Get detailed server to ensure addresses are present
+        # in fixed IP case.
+        server = self.servers_client.show_server(server['id'])['server']
 
         # Attach tagged nic and volume
         interface = self.interfaces_client.create_interface(
